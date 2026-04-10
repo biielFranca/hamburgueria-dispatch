@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { syncIfood } from '../../lib/ifood'
 import { playAlert } from '../../lib/alertSound'
+import { runRouteEngine } from '../../lib/routeEngine'
+import type { Order } from '../../types'
 import './Dev.css'
 
 const NAMES = ['João Silva', 'Maria Souza', 'Carlos Oliveira', 'Ana Costa', 'Pedro Santos', 'Lucia Ferreira']
@@ -49,23 +51,54 @@ function mockOrder(storeId: string, type: 'own' | 'platform' | 'pickup') {
     payment_method: pick(PAYMENTS),
     delivery_type: isTakeout ? 'pickup' : 'delivery',
     logistics_type: isOwn ? 'own' : 'platform',
-    status: isOwn && !isTakeout ? 'awaiting_route' : 'normalized',
-    route_eligibility: isOwn && !isTakeout ? 'eligible' : 'external_monitoring',
+    // All orders start as 'normalized' so the classifier does a meaningful UPDATE
+    // to 'awaiting_route', which triggers the route engine via Realtime.
+    status: 'normalized',
+    route_eligibility: isTakeout ? 'blocked' : isOwn ? 'awaiting' : 'external_monitoring',
     rejection_count: 0,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }
 }
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 type BtnState = 'idle' | 'loading' | 'ok' | 'error'
-interface BtnStatus {
-  state: BtnState
-  msg: string
-}
+interface BtnStatus { state: BtnState; msg: string }
 const IDLE: BtnStatus = { state: 'idle', msg: '' }
+
+type LogLevel = 'info' | 'ok' | 'warn' | 'error'
+interface LogEntry { id: string; ts: Date; level: LogLevel; msg: string }
+
+const MAX_LOG = 80
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const PREFIX_CLASS: Record<string, string> = {
+  '[classifier]':   'log-prefix-classifier',
+  '[geocoder]':     'log-prefix-geocoder',
+  '[route-engine]': 'log-prefix-engine',
+  '[monitor]':      'log-prefix-monitor',
+}
+
+function LogMsg({ msg }: { msg: string }) {
+  const match = msg.match(/^(\[\S+\])\s(.*)$/)
+  if (!match) return <span>{msg}</span>
+  const [, prefix, rest] = match
+  return (
+    <>
+      <span className={`dev-log-prefix ${PREFIX_CLASS[prefix] ?? ''}`}>{prefix}</span>
+      {' '}
+      <span>{rest}</span>
+    </>
+  )
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Dev() {
   const storeIdRef = useRef<string | null>(null)
+  const [storeId, setStoreId] = useState<string | null>(null)
 
   const [ownBtn, setOwnBtn] = useState<BtnStatus>(IDLE)
   const [platformBtn, setPlatformBtn] = useState<BtnStatus>(IDLE)
@@ -75,30 +108,138 @@ export default function Dev() {
   const [alarmBtn, setAlarmBtn] = useState<BtnStatus>(IDLE)
   const [testCount, setTestCount] = useState<number | null>(null)
 
+  // Monitor
+  const [log, setLog] = useState<LogEntry[]>([])
+  const [eligible, setEligible] = useState<number | null>(null)
+  const [pendingSugg, setPendingSugg] = useState<number | null>(null)
+  const [engineRunning, setEngineRunning] = useState(false)
+  const SOLO_WAIT = Number(import.meta.env.VITE_SOLO_WAIT_MIN ?? 10)
+
+  function addLog(level: LogLevel, msg: string) {
+    setLog(prev => [{ id: crypto.randomUUID(), ts: new Date(), level, msg }, ...prev].slice(0, MAX_LOG))
+  }
+
+  async function refreshStats(sid?: string) {
+    const id = sid ?? storeIdRef.current
+    if (!id) return
+    const [eligRes, suggRes] = await Promise.all([
+      supabase.from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', id).eq('route_eligibility', 'eligible').eq('status', 'awaiting_route'),
+      supabase.from('dispatch_suggestions')
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', id).eq('status', 'pending_review'),
+    ])
+    setEligible(eligRes.count ?? 0)
+    setPendingSugg(suggRes.count ?? 0)
+  }
+
   useEffect(() => {
     async function init() {
-      const { data: auth } = await supabase.auth.getUser()
-      if (!auth.user) return
-      const { data } = await supabase
-        .from('users')
-        .select('store_id')
-        .eq('auth_id', auth.user.id)
-        .single()
-      if (data) {
-        storeIdRef.current = data.store_id
-        refreshCount(data.store_id)
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) return
+      const { data: userData } = await supabase
+        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
+      if (userData) {
+        storeIdRef.current = userData.store_id
+        setStoreId(userData.store_id)
+        refreshCount(userData.store_id)
+        refreshStats(userData.store_id)
       }
     }
     init()
   }, [])
 
-  async function refreshCount(sid?: string) {
-    const storeId = sid ?? storeIdRef.current
+  // ── Monitor: Supabase Realtime subscriptions ─────────────────────────────────
+
+  useEffect(() => {
     if (!storeId) return
+
+    const channel = supabase
+      .channel(`dev-monitor-${storeId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders', filter: `store_id=eq.${storeId}` },
+        (payload) => {
+          const o = payload.new as Order
+          const code = o.platform_order_code ?? o.id.slice(0, 8)
+          addLog('info', `[classifier] ${code} recebido → ${o.status} | ${o.route_eligibility ?? '?'}`)
+          refreshStats(storeId)
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `store_id=eq.${storeId}` },
+        (payload) => {
+          const o = payload.new as Order
+          const prev = payload.old as Partial<Order>
+          const code = o.platform_order_code ?? o.id.slice(0, 8)
+
+          if (prev.latitude == null && o.latitude != null) {
+            addLog('info', `[geocoder] ${code} geocodificado: ${o.latitude.toFixed(4)}, ${o.longitude?.toFixed(4)}`)
+          }
+
+          if (prev.status !== o.status || prev.route_eligibility !== o.route_eligibility) {
+            let level: LogLevel = 'info'
+            if (o.status === 'awaiting_route') level = 'ok'
+            if (o.status === 'dispatch_timeout') level = 'error'
+            if (o.route_eligibility === 'blocked') level = 'warn'
+
+            const blockInfo = o.route_block_reason ? ` ✗ ${o.route_block_reason}` : ''
+            addLog(
+              level,
+              `[classifier] ${code}: ${prev.status ?? '?'} → ${o.status} | ${o.route_eligibility ?? '?'}${blockInfo}`,
+            )
+            refreshStats(storeId)
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'dispatch_suggestions', filter: `store_id=eq.${storeId}` },
+        (payload) => {
+          const s = payload.new as { suggested_sequence?: string[]; predicted_eta?: number | null }
+          const n = Array.isArray(s.suggested_sequence) ? s.suggested_sequence.length : '?'
+          const eta = s.predicted_eta != null ? `${s.predicted_eta}min` : 'sem ETA'
+          addLog('ok', `[route-engine] Sugestão criada: ${n} pedido(s), ${eta}`)
+          refreshStats(storeId)
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'dispatch_suggestions', filter: `store_id=eq.${storeId}` },
+        (payload) => {
+          const s = payload.new as { id: string; status: string }
+          const prev = payload.old as { status?: string }
+          if (s.status && prev.status !== s.status) {
+            const level: LogLevel = ['accepted', 'dispatched'].includes(s.status)
+              ? 'ok'
+              : s.status === 'rejected'
+              ? 'warn'
+              : 'info'
+            addLog(level, `[route-engine] Sugestão ${s.id.slice(0, 8)}: ${prev.status ?? '?'} → ${s.status}`)
+            refreshStats(storeId)
+          }
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED')    addLog('info', '[monitor] Realtime conectado')
+        if (status === 'CHANNEL_ERROR') addLog('error', '[monitor] Erro na conexão Realtime')
+        if (status === 'TIMED_OUT')     addLog('warn', '[monitor] Realtime timeout — reconectando...')
+      })
+
+    return () => { supabase.removeChannel(channel) }
+  }, [storeId])
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+
+  async function refreshCount(sid?: string) {
+    const id = sid ?? storeIdRef.current
+    if (!id) return
     const { count } = await supabase
       .from('orders')
       .select('id', { count: 'exact', head: true })
-      .eq('store_id', storeId)
+      .eq('store_id', id)
       .ilike('platform_order_id', 'test-%')
     setTestCount(count ?? 0)
   }
@@ -116,7 +257,7 @@ export default function Dev() {
     } else {
       const label =
         type === 'own'
-          ? `${payload.platform_order_code} - entrega própria -> fila de despacho`
+          ? `${payload.platform_order_code} - entrega própria -> classificador`
           : type === 'platform'
           ? `${payload.platform_order_code} - entrega plataforma -> monitoramento`
           : `${payload.platform_order_code} - retirada`
@@ -124,6 +265,21 @@ export default function Dev() {
       refreshCount()
     }
     setTimeout(() => set(IDLE), 4000)
+  }
+
+  async function handleForceEngine() {
+    if (!storeIdRef.current) return
+    setEngineRunning(true)
+    addLog('info', '[route-engine] Execução manual iniciada...')
+    try {
+      await runRouteEngine(storeIdRef.current)
+      addLog('ok', '[route-engine] Execução concluída')
+    } catch (e) {
+      addLog('error', `[route-engine] Erro: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setEngineRunning(false)
+      refreshStats()
+    }
   }
 
   async function handleTestIfood() {
@@ -168,6 +324,8 @@ export default function Dev() {
     setTimeout(() => setClearBtn(IDLE), 3000)
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────────
+
   return (
     <div className="dev-panel">
       <div className="dev-header">
@@ -188,7 +346,7 @@ export default function Dev() {
         <div className="dev-btn-row">
           <DevButton
             label="Entrega própria"
-            desc="-> fila de despacho"
+            desc="-> classificador → fila de despacho"
             color="#27AE60"
             status={ownBtn}
             onClick={() => insertOrder('own', setOwnBtn)}
@@ -253,6 +411,73 @@ export default function Dev() {
             status={alarmBtn}
             onClick={() => handleAlarm('critical')}
           />
+        </div>
+      </section>
+
+      {/* ── Monitor ──────────────────────────────────────────────────────────── */}
+
+      <section className="dev-section dev-monitor-section">
+        <div className="dev-section-title">
+          Monitor em tempo real
+          <span className="dev-live-dot" title="Realtime conectado" />
+        </div>
+        <div className="dev-section-desc">
+          Eventos de classificação e roteamento ao vivo. Atualize a página para reconectar se o dot parar de pulsar.
+        </div>
+
+        <div className="dev-monitor-stats">
+          <div className="dev-stat">
+            <span className="dev-stat-value">{eligible ?? '—'}</span>
+            <span className="dev-stat-label">aguardando rota</span>
+          </div>
+          <div className="dev-stat">
+            <span className="dev-stat-value">{pendingSugg ?? '—'}</span>
+            <span className="dev-stat-label">sugestões pendentes</span>
+          </div>
+          <div className="dev-stat">
+            <span className="dev-stat-value">{SOLO_WAIT}min</span>
+            <span className="dev-stat-label">espera solo</span>
+          </div>
+        </div>
+
+        <div className="dev-monitor-controls">
+          <button
+            className={`dev-monitor-btn${engineRunning ? ' dev-monitor-btn-loading' : ''}`}
+            onClick={handleForceEngine}
+            disabled={engineRunning || !storeId}
+          >
+            {engineRunning ? 'Executando...' : 'Forçar route engine'}
+          </button>
+          <button
+            className="dev-monitor-btn dev-monitor-btn-secondary"
+            onClick={() => { refreshStats(); refreshCount() }}
+          >
+            Atualizar stats
+          </button>
+          <button
+            className="dev-monitor-btn dev-monitor-btn-secondary"
+            onClick={() => setLog([])}
+            disabled={log.length === 0}
+          >
+            Limpar log
+          </button>
+        </div>
+
+        <div className="dev-log">
+          {log.length === 0 ? (
+            <div className="dev-log-empty">Aguardando eventos...</div>
+          ) : (
+            log.map(entry => (
+              <div key={entry.id} className={`dev-log-entry dev-log-${entry.level}`}>
+                <span className="dev-log-time">
+                  {entry.ts.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+                <span className="dev-log-msg">
+                  <LogMsg msg={entry.msg} />
+                </span>
+              </div>
+            ))
+          )}
         </div>
       </section>
 
