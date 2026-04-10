@@ -3,7 +3,8 @@ import type { Order, Store } from '../types'
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const OSRM_BASE = import.meta.env.VITE_ROUTES_API_URL ?? 'https://router.project-osrm.org'
+const OSRM_BASE            = import.meta.env.VITE_ROUTES_API_URL ?? 'https://router.project-osrm.org'
+const OSRM_PROFILE         = import.meta.env.VITE_OSRM_PROFILE   ?? 'driving'
 const SINGLE_ORDER_WAIT_MS = 10 * 60_000   // 10 min before dispatching solo
 const MAX_REJECTIONS       = 3             // after this, mark as dispatch_timeout
 
@@ -17,9 +18,9 @@ interface RouteResult {
 async function getRouteDuration(
   coords: [number, number][],  // [lat, lng] pairs
 ): Promise<RouteResult> {
-  // OSRM expects lng,lat order
+  // OSRM expects lng,lat order; profile goes in the URL path, not as a query param
   const coordStr = coords.map(([lat, lng]) => `${lng},${lat}`).join(';')
-  const url = `${OSRM_BASE}/route/v1/driving/${coordStr}?overview=false&profile=bike`
+  const url = `${OSRM_BASE}/route/v1/${OSRM_PROFILE}/${coordStr}?overview=false`
 
   const res = await fetch(url)
   if (!res.ok) throw new Error(`OSRM error ${res.status}`)
@@ -69,14 +70,15 @@ async function createSuggestion(
 
   if (error) throw error
 
-  // Link orders to suggestion
+  // Link orders to suggestion (best-effort; main flow already succeeded above)
   const orderLinks = sequence.map((order, idx) => ({
     suggestion_id: suggestion.id,
     order_id:      order.id,
     position:      idx + 1,
   }))
 
-  await supabase.from('dispatch_suggestion_orders').insert(orderLinks)
+  const { error: linkError } = await supabase.from('dispatch_suggestion_orders').insert(orderLinks)
+  if (linkError) console.warn('[RouteEngine] dispatch_suggestion_orders insert failed:', linkError.message)
 
   // Mark orders as in_suggestion
   await supabase
