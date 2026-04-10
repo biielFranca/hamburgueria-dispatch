@@ -5,7 +5,8 @@ import type { Order, Store } from '../types'
 
 const OSRM_BASE            = import.meta.env.VITE_ROUTES_API_URL ?? 'https://router.project-osrm.org'
 const OSRM_PROFILE         = import.meta.env.VITE_OSRM_PROFILE   ?? 'driving'
-const SINGLE_ORDER_WAIT_MS = 10 * 60_000   // 10 min before dispatching solo
+// VITE_SOLO_WAIT_MIN overrides the solo-order wait (useful for dev/testing, default 10 min)
+const SINGLE_ORDER_WAIT_MS = Number(import.meta.env.VITE_SOLO_WAIT_MIN ?? 10) * 60_000
 const MAX_REJECTIONS       = 3             // after this, mark as dispatch_timeout
 
 // ── OSRM route query ──────────────────────────────────────────────────────────
@@ -119,12 +120,20 @@ export async function runRouteEngine(storeId: string): Promise<void> {
   const { data: storeData } = await supabase
     .from('stores').select('*').eq('id', storeId).single()
   const store = storeData as Store | null
-  if (!store?.latitude || !store?.longitude) return
+  if (!store?.latitude || !store?.longitude) {
+    console.warn('[RouteEngine] Loja sem coordenadas configuradas — engine pausado. Configure lat/lng em Configurações.')
+    return
+  }
 
   const storeCoord: [number, number] = [store.latitude, store.longitude]
 
   const eligible = await fetchEligibleOrders(storeId)
-  if (eligible.length === 0) return
+  if (eligible.length === 0) {
+    console.debug('[RouteEngine] Nenhum pedido elegível no momento.')
+    return
+  }
+
+  console.debug(`[RouteEngine] ${eligible.length} pedido(s) elegível(is) encontrado(s).`)
 
   // Handle max-rejection timeouts first
   await handleTimeouts(eligible, storeId)
@@ -133,11 +142,15 @@ export async function runRouteEngine(storeId: string): Promise<void> {
 
   // Filter orders with valid coordinates
   const withCoords = active.filter(o => o.latitude != null && o.longitude != null)
-  if (withCoords.length === 0) return
+  if (withCoords.length === 0) {
+    console.warn('[RouteEngine] Pedidos elegíveis sem coordenadas — impossível calcular rota.')
+    return
+  }
 
   // ── Pair selection ──────────────────────────────────────────────────────────
 
   if (withCoords.length >= 2) {
+    console.debug(`[RouteEngine] Par encontrado — criando sugestão com ${withCoords.length >= 2 ? 2 : 1} pedido(s).`)
     const [a, b] = withCoords  // highest priority first (sorted by rejection_count desc, created_at asc)
     const coordA: [number, number] = [a.latitude!, a.longitude!]
     const coordB: [number, number] = [b.latitude!, b.longitude!]
@@ -172,6 +185,14 @@ export async function runRouteEngine(storeId: string): Promise<void> {
 
   const solo = withCoords[0]
   const waitedMs = Date.now() - new Date(solo.created_at).getTime()
+  const waitedMin = Math.floor(waitedMs / 60_000)
+  const remainingMin = Math.ceil((SINGLE_ORDER_WAIT_MS - waitedMs) / 60_000)
+  if (waitedMs < SINGLE_ORDER_WAIT_MS) {
+    console.debug(`[RouteEngine] 1 pedido solo aguardando — ${waitedMin}min passados, faltam ~${remainingMin}min para despacho automático.`)
+  }
+  if (waitedMs >= SINGLE_ORDER_WAIT_MS) {
+    console.debug('[RouteEngine] Pedido solo atingiu tempo de espera — despachando.')
+  }
   if (waitedMs >= SINGLE_ORDER_WAIT_MS) {
     let duration: number | null = null
     try {

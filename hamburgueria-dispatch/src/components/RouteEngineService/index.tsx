@@ -27,6 +27,9 @@ export default function RouteEngineService() {
       storeId = userData.store_id
       stop = startRouteEngine(storeId)
 
+      // Run once immediately to process any orders already waiting when the app loads
+      await runRouteEngine(storeId)
+
       // Periodic poll: catches solo orders whose 10-min wait has elapsed
       // but no new order arrived to re-trigger the Realtime listener
       pollTimer = setInterval(async () => {
