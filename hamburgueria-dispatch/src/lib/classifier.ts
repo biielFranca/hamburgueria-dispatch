@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { geocodeOrderAddress } from './geocoder'
 import type { Order, RouteEligibility } from '../types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -88,7 +89,39 @@ export function startClassifier(storeId: string): () => void {
       },
       async (payload) => {
         const order = payload.new as Order
-        const result = classifyOrder(order)
+
+        // Se o pedido não tem coordenadas mas tem rua, tenta geocodificar
+        // usando CEP + número da casa antes de classificar
+        let geocodedCoords: { latitude: number; longitude: number } | null = null
+
+        if (
+          (order.latitude == null || order.longitude == null) &&
+          order.address_street?.trim()
+        ) {
+          console.debug(`[Classifier] Pedido ${order.platform_order_code ?? order.id.slice(0, 8)} sem coords — tentando geocodificar...`)
+
+          const geo = await geocodeOrderAddress(
+            order.address_street,
+            order.address_number,
+            order.address_neighborhood,
+            order.address_city,
+            order.address_zip,
+          )
+
+          if (geo) {
+            geocodedCoords = { latitude: geo.latitude, longitude: geo.longitude }
+            console.debug(`[Classifier] Geocodificado via ${geo.source}: ${geo.latitude.toFixed(5)}, ${geo.longitude.toFixed(5)}`)
+          } else {
+            console.warn(`[Classifier] Geocodificação falhou para o pedido ${order.platform_order_code ?? order.id.slice(0, 8)}`)
+          }
+        }
+
+        // Classifica com as coordenadas obtidas (se houver)
+        const enrichedOrder = geocodedCoords
+          ? { ...order, latitude: geocodedCoords.latitude, longitude: geocodedCoords.longitude }
+          : order
+
+        const result = classifyOrder(enrichedOrder)
 
         await supabase
           .from('orders')
@@ -96,6 +129,8 @@ export function startClassifier(storeId: string): () => void {
             route_eligibility:  result.route_eligibility,
             route_block_reason: result.route_block_reason,
             status:             result.status,
+            // Persiste as coordenadas geocodificadas junto com a classificação
+            ...(geocodedCoords ?? {}),
           })
           .eq('id', order.id)
       },
