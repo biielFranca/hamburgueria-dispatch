@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { startRouteEngine, runRouteEngine } from '../../lib/routeEngine'
 
-const POLL_INTERVAL_MS = 60_000  // re-run every 60s to catch solo orders past the 10-min wait
+const POLL_INTERVAL_MS = 15_000  // re-run every 15s to catch solo orders and missed Realtime events
 
 /**
  * Background component that subscribes to order status changes

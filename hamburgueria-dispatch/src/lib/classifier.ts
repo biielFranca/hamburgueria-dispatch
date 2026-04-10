@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { geocodeOrderAddress } from './geocoder'
+import { runRouteEngine } from './routeEngine'
 import type { Order, RouteEligibility } from '../types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -133,6 +134,15 @@ export function startClassifier(storeId: string): () => void {
             ...(geocodedCoords ?? {}),
           })
           .eq('id', order.id)
+
+        // Aciona o engine diretamente quando o pedido se torna elegível.
+        // Não depende do Realtime UPDATE do routeEngine (que pode não disparar
+        // de forma confiável se o banco não tiver REPLICA IDENTITY FULL).
+        if (result.status === 'awaiting_route') {
+          runRouteEngine(storeId).catch(e =>
+            console.error('[Classifier] runRouteEngine error:', e),
+          )
+        }
       },
     )
     .subscribe()
