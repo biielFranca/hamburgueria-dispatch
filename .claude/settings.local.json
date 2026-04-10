@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(uipro init:*)",
+      "mcp__93a13cb9-4a63-444f-97da-6063a4000a52__list_projects",
+      "mcp__93a13cb9-4a63-444f-97da-6063a4000a52__apply_migration",
+      "mcp__93a13cb9-4a63-444f-97da-6063a4000a52__deploy_edge_function",
+      "mcp__93a13cb9-4a63-444f-97da-6063a4000a52__get_logs",
+      "mcp__93a13cb9-4a63-444f-97da-6063a4000a52__get_edge_function",
+      "Bash(npx tsc:*)",
+      "Bash(cargo check:*)"
+    ]
+  }
+}

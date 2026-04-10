@@ -1,0 +1,346 @@
+/* ── Panel ───────────────────────────────────────────── */
+.drivers-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #0f0f0f;
+}
+
+.drivers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #1e1e1e;
+  flex-shrink: 0;
+}
+
+.drivers-header h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* ── Add driver form ─────────────────────────────────── */
+.drivers-add-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px;
+  border-bottom: 1px solid #1a1a1a;
+  flex-shrink: 0;
+}
+
+.drivers-add-input {
+  flex: 1;
+  max-width: 320px;
+  background: #141414;
+  border: 1px solid #252525;
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #ddd;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.drivers-add-input:focus {
+  border-color: #3a3a3a;
+  color: #fff;
+}
+
+.drivers-add-input::placeholder {
+  color: #333;
+}
+
+.btn-add-driver {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #fff;
+  border: none;
+  border-radius: 7px;
+  color: #000;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn-add-driver:hover {
+  background: #eee;
+}
+
+.btn-add-driver:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Filter tabs ─────────────────────────────────────── */
+.drivers-filter {
+  display: flex;
+  gap: 4px;
+  padding: 10px 24px 0;
+  flex-shrink: 0;
+}
+
+.filter-tab {
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #444;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.filter-tab.active {
+  background: #1a1a1a;
+  color: #ddd;
+}
+
+.filter-tab:hover:not(.active) {
+  color: #666;
+}
+
+/* ── List area ───────────────────────────────────────── */
+.drivers-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 24px 20px;
+}
+
+.drivers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Driver row ──────────────────────────────────────── */
+.driver-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #141414;
+  border: 1px solid #1a1a1a;
+  border-radius: 8px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.driver-row:hover {
+  background: #181818;
+  border-color: #222;
+}
+
+.driver-row.inactive {
+  opacity: 0.55;
+}
+
+.driver-row-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.driver-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ddd;
+  flex: 1;
+}
+
+.driver-row-date {
+  font-size: 11px;
+  color: #444;
+}
+
+.driver-row-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.driver-row-status.active-badge {
+  background: rgba(39,174,96,0.12);
+  color: #4ade80;
+}
+
+.driver-row-status.inactive-badge {
+  background: rgba(100,116,139,0.12);
+  color: #64748b;
+}
+
+/* ── Row actions ─────────────────────────────────────── */
+.driver-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-toggle-driver {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid #252525;
+  background: #1a1a1a;
+  color: #888;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-toggle-driver:hover {
+  background: #222;
+  color: #ccc;
+}
+
+.btn-toggle-driver.activate {
+  border-color: rgba(39,174,96,0.2);
+  background: rgba(39,174,96,0.06);
+  color: #4ade80;
+}
+
+.btn-toggle-driver.activate:hover {
+  background: rgba(39,174,96,0.12);
+}
+
+.btn-delete-driver {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #252525;
+  background: transparent;
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-delete-driver:hover {
+  background: rgba(239,68,68,0.1);
+  color: #f87171;
+  border-color: rgba(239,68,68,0.25);
+}
+
+/* ── Empty state ─────────────────────────────────────── */
+.drivers-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #333;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.drivers-empty svg {
+  opacity: 0.2;
+  margin-bottom: 6px;
+}
+
+/* ── Confirm delete modal ────────────────────────────── */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0);
+  backdrop-filter: blur(0px);
+  transition: background 0.2s, backdrop-filter 0.2s;
+  pointer-events: none;
+}
+
+.confirm-overlay.open {
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(5px);
+  pointer-events: all;
+}
+
+.confirm-card {
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 24px;
+  width: 320px;
+  transform: scale(0.92);
+  opacity: 0;
+  transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), opacity 0.18s ease;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+
+.confirm-overlay.open .confirm-card {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.confirm-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.confirm-text {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-confirm-cancel {
+  padding: 7px 14px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  color: #666;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-confirm-delete {
+  padding: 7px 16px;
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 6px;
+  color: #f87171;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-confirm-delete:hover {
+  background: rgba(239,68,68,0.25);
+}
+
+/* ── Loading ─────────────────────────────────────────── */
+.drivers-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #444;
+  font-size: 13px;
+}

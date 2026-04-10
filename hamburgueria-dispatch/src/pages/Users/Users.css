@@ -1,0 +1,583 @@
+/* ── Panel ───────────────────────────────────────────── */
+.um-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #0f0f0f;
+}
+
+.um-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #444;
+  font-size: 13px;
+}
+
+/* ── Header ──────────────────────────────────────────── */
+.um-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #1e1e1e;
+  flex-shrink: 0;
+}
+
+.um-header h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.um-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.um-btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #fff;
+  border: none;
+  border-radius: 7px;
+  color: #000;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.um-btn-primary:hover { background: #eee; }
+
+.um-btn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #141414;
+  border: 1px solid #252525;
+  border-radius: 7px;
+  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.um-btn-secondary:hover { background: #1a1a1a; color: #ccc; }
+
+/* ── Filter tabs ─────────────────────────────────────── */
+.um-filter-bar {
+  display: flex;
+  gap: 4px;
+  padding: 10px 24px 0;
+  flex-shrink: 0;
+}
+
+/* filter-tab styles reused from Drivers.css pattern */
+.um-filter-bar .filter-tab {
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #444;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.um-filter-bar .filter-tab.active {
+  background: #1a1a1a;
+  color: #ddd;
+}
+
+.um-filter-bar .filter-tab:hover:not(.active) { color: #666; }
+
+/* ── Table area ──────────────────────────────────────── */
+.um-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 24px 20px;
+}
+
+.um-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.um-table thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid #1a1a1a;
+  white-space: nowrap;
+}
+
+.um-table tbody tr {
+  border-bottom: 1px solid #141414;
+  transition: background 0.12s;
+}
+
+.um-table tbody tr:hover { background: #141414; }
+.um-table tbody tr.row-inactive { opacity: 0.5; }
+
+.um-table tbody td {
+  padding: 11px 12px;
+  color: #ccc;
+  vertical-align: middle;
+}
+
+/* ── Cell variants ───────────────────────────────────── */
+.um-td-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  color: #ddd;
+  white-space: nowrap;
+}
+
+.um-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.um-td-muted {
+  color: #555;
+  font-size: 12px;
+}
+
+/* ── Type badge ──────────────────────────────────────── */
+.user-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.user-type-badge.operator {
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+}
+
+.user-type-badge.driver {
+  background: rgba(39, 174, 96, 0.1);
+  color: #4ade80;
+}
+
+/* ── Password cell ───────────────────────────────────── */
+.um-pwd-cell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.um-pwd-text {
+  font-size: 12px;
+  color: #666;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+}
+
+.um-pwd-eye {
+  background: none;
+  border: none;
+  color: #444;
+  cursor: pointer;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.um-pwd-eye:hover { color: #888; }
+
+/* ── Row toggle (ativo/inativo) ──────────────────────── */
+.um-row-toggle {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.um-row-toggle.active {
+  background: rgba(39, 174, 96, 0.1);
+  color: #4ade80;
+}
+
+.um-row-toggle.active:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #f87171;
+}
+
+.um-row-toggle.inactive {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+}
+
+.um-row-toggle.inactive:hover {
+  background: rgba(39, 174, 96, 0.1);
+  color: #4ade80;
+}
+
+/* ── Empty state ─────────────────────────────────────── */
+.um-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #333;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.um-empty svg {
+  opacity: 0.15;
+  margin-bottom: 6px;
+}
+
+/* ── Modal overlay ───────────────────────────────────── */
+.um-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0px);
+  transition: background 0.2s, backdrop-filter 0.2s;
+  pointer-events: none;
+}
+
+.um-overlay.open {
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(5px);
+  pointer-events: all;
+}
+
+/* ── Modal card ──────────────────────────────────────── */
+.um-modal {
+  background: #181818;
+  border: 1px solid #272727;
+  border-radius: 12px;
+  width: 380px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  transform: scale(0.92);
+  opacity: 0;
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.18s ease;
+}
+
+.um-overlay.open .um-modal {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.um-search-modal {
+  width: 420px;
+}
+
+/* ── Modal header ────────────────────────────────────── */
+.um-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #222;
+}
+
+.um-modal-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.um-modal-close {
+  background: none;
+  border: none;
+  color: #444;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.um-modal-close:hover { color: #888; }
+
+/* ── Modal body ──────────────────────────────────────── */
+.um-modal-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.um-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.um-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.um-field-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.um-input {
+  background: #111;
+  border: 1px solid #252525;
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #ddd;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.um-input:focus { border-color: #3a3a3a; color: #fff; }
+.um-input::placeholder { color: #333; }
+
+.um-input-readonly {
+  color: #444;
+  cursor: not-allowed;
+}
+
+/* ── Type kind toggle ────────────────────────────────── */
+.um-kind-toggle {
+  display: flex;
+  gap: 4px;
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.um-kind-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #444;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.um-kind-btn.active {
+  background: #222;
+  color: #ddd;
+}
+
+/* ── Active toggle in edit modal ─────────────────────── */
+.um-active-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 1px solid #252525;
+  border-radius: 7px;
+  background: #111;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.um-active-toggle.on  { border-color: rgba(39,174,96,0.3); }
+.um-active-toggle.off { border-color: #222; }
+
+.um-toggle-knob {
+  width: 28px;
+  height: 15px;
+  border-radius: 8px;
+  background: #2a2a2a;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.um-active-toggle.on .um-toggle-knob { background: #27AE60; }
+
+.um-toggle-knob::after {
+  content: '';
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.um-active-toggle.on .um-toggle-knob::after { transform: translateX(13px); }
+
+.um-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+}
+
+.um-active-toggle.on .um-toggle-label  { color: #4ade80; }
+
+/* ── Search modal ────────────────────────────────────── */
+.um-search-bar {
+  position: relative;
+}
+
+.um-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #444;
+  pointer-events: none;
+}
+
+.um-search-input {
+  width: 100%;
+  background: #111;
+  border: 1px solid #252525;
+  border-radius: 7px;
+  padding: 8px 12px 8px 32px;
+  font-size: 13px;
+  color: #ddd;
+  outline: none;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.um-search-input:focus { border-color: #3a3a3a; }
+.um-search-input::placeholder { color: #333; }
+
+.um-search-results {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.um-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  width: 100%;
+}
+
+.um-search-row:hover {
+  background: #1a1a1a;
+  border-color: #252525;
+}
+
+.um-search-row-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ddd;
+}
+
+.um-search-row-user {
+  font-size: 11px;
+  color: #444;
+}
+
+.um-search-empty {
+  text-align: center;
+  padding: 24px;
+  color: #333;
+  font-size: 13px;
+}
+
+/* ── Error message ───────────────────────────────────── */
+.um-error {
+  font-size: 12px;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin: 0;
+}
+
+/* ── Modal footer ────────────────────────────────────── */
+.um-modal-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #1e1e1e;
+}
+
+.um-btn-cancel {
+  padding: 7px 14px;
+  background: #141414;
+  border: 1px solid #252525;
+  border-radius: 6px;
+  color: #666;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.um-btn-cancel:hover { background: #1a1a1a; color: #999; }
+
+.um-btn-save {
+  padding: 7px 18px;
+  background: #fff;
+  border: none;
+  border-radius: 6px;
+  color: #000;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.um-btn-save:hover    { background: #eee; }
+.um-btn-save:disabled { opacity: 0.4; cursor: not-allowed; }

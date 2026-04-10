@@ -1,0 +1,176 @@
+.dev-panel {
+  padding: 32px;
+  max-width: 860px;
+  height: 100vh;
+  overflow-y: auto;
+  color: #ccc;
+}
+
+.dev-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.dev-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.dev-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #F5A623;
+  background: rgba(245, 166, 35, 0.1);
+  border: 1px solid rgba(245, 166, 35, 0.25);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────────── */
+
+.dev-section {
+  background: #111;
+  border: 1px solid #1e1e1e;
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+
+.dev-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dev-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: #555;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+.dev-section-desc {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+
+.dev-section-desc code {
+  font-family: monospace;
+  font-size: 11px;
+  color: #888;
+  background: #1a1a1a;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────────── */
+
+.dev-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dev-btn-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dev-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+  background: #171717;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+  min-width: 220px;
+}
+
+.dev-btn:hover:not(:disabled) {
+  background: #1e1e1e;
+  border-color: var(--btn-color, #444);
+}
+
+.dev-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dev-btn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--btn-color, #555);
+  flex-shrink: 0;
+}
+
+.dev-btn-ok    .dev-btn-dot { background: #27AE60; }
+.dev-btn-error .dev-btn-dot { background: #ef4444; }
+.dev-btn-loading .dev-btn-dot {
+  background: #555;
+  animation: dev-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes dev-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.dev-btn-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #ddd;
+  display: block;
+}
+
+.dev-btn-desc {
+  font-size: 11px;
+  color: #555;
+  display: block;
+  margin-top: 1px;
+}
+
+.dev-btn > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Result messages ───────────────────────────────────────────────────────── */
+
+.dev-result {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  max-width: 340px;
+}
+
+.dev-result-ok {
+  color: #27AE60;
+  background: rgba(39, 174, 96, 0.08);
+  border: 1px solid rgba(39, 174, 96, 0.2);
+}
+
+.dev-result-error {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}

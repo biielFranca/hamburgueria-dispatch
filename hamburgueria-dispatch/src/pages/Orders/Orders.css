@@ -1,0 +1,476 @@
+/* ── Layout ─────────────────────────────────────────── */
+.orders-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #0f0f0f;
+}
+
+.orders-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #1e1e1e;
+  flex-shrink: 0;
+}
+
+.orders-header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
+
+.orders-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.orders-refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.orders-refresh-btn:hover {
+  background: #222;
+  color: #ddd;
+  border-color: #444;
+}
+
+.orders-refresh-btn svg {
+  flex-shrink: 0;
+}
+
+.orders-refresh-btn.spinning svg {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Columns grid ───────────────────────────────────── */
+.orders-columns {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 12px 16px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.orders-column {
+  display: flex;
+  flex-direction: column;
+  background: #141414;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #1e1e1e;
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+
+.column-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.column-title span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.column-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.column-count {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  color: #888;
+}
+
+.column-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.column-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+  font-size: 12px;
+  padding: 20px 0;
+}
+
+/* ── Order card ─────────────────────────────────────── */
+.order-card {
+  background: #1a1a1a;
+  border-radius: 8px;
+  padding: 11px 12px;
+  cursor: pointer;
+  border: 1px solid #232323;
+  border-left: 3px solid var(--platform-color);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  user-select: none;
+}
+
+.order-card:hover {
+  background: #1f1f1f;
+  border-color: #2e2e2e;
+  border-left-color: var(--platform-color);
+  transform: translateY(-1px);
+}
+
+.order-card:active {
+  transform: translateY(0);
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.card-code {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--platform-color);
+  letter-spacing: 0.4px;
+}
+
+.card-status {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+}
+
+.card-customer {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e8e8e8;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-address {
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #252525;
+}
+
+.card-amount {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ccc;
+}
+
+.card-time {
+  font-size: 10px;
+  color: #444;
+}
+
+/* ── Status styles ──────────────────────────────────── */
+.status-received      { background: rgba(59,130,246,0.12); color: #60a5fa; }
+.status-normalized    { background: rgba(168,85,247,0.12); color: #c084fc; }
+.status-awaiting      { background: rgba(234,179,8,0.12);  color: #facc15; }
+.status-in_suggestion { background: rgba(249,115,22,0.12); color: #fb923c; }
+.status-dispatched    { background: rgba(34,197,94,0.12);  color: #4ade80; }
+.status-delivered     { background: rgba(100,116,139,0.12);color: #94a3b8; }
+.status-cancelled     { background: rgba(239,68,68,0.12);  color: #f87171; }
+.status-timeout       { background: rgba(239,68,68,0.12);  color: #f87171; }
+
+/* ── Modal overlay ──────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+  transition: background 0.25s ease, backdrop-filter 0.25s ease, -webkit-backdrop-filter 0.25s ease;
+  pointer-events: none;
+}
+
+.modal-overlay.open {
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  pointer-events: all;
+}
+
+/* ── Modal card ─────────────────────────────────────── */
+.modal-card {
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 88vh;
+  overflow-y: auto;
+  transform: scale(0.92) translateY(10px);
+  opacity: 0;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.modal-overlay.open .modal-card {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #222;
+  position: sticky;
+  top: 0;
+  background: #181818;
+  border-radius: 14px 14px 0 0;
+  z-index: 1;
+}
+
+.modal-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.modal-platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  background: rgba(255,255,255,0.06);
+}
+
+.modal-platform-badge .badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.modal-order-code {
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
+
+.modal-close-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid #2a2a2a;
+  background: #1f1f1f;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.modal-close-btn:hover {
+  background: #2a2a2a;
+  color: #ccc;
+}
+
+.modal-body {
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Modal sections ─────────────────────────────────── */
+.modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #444;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1e1e1e;
+}
+
+.modal-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.modal-row-label {
+  font-size: 11px;
+  color: #555;
+  flex-shrink: 0;
+  width: 80px;
+}
+
+.modal-row-value {
+  font-size: 12px;
+  color: #ccc;
+  font-weight: 500;
+  flex: 1;
+}
+
+/* ── Items list ─────────────────────────────────────── */
+.modal-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #1f1f1f;
+  border-radius: 7px;
+}
+
+.modal-item-name {
+  font-size: 12px;
+  color: #ddd;
+  font-weight: 500;
+  flex: 1;
+}
+
+.modal-item-qty {
+  font-size: 11px;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.modal-item-price {
+  font-size: 12px;
+  color: #aaa;
+  font-weight: 600;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.modal-item-notes {
+  font-size: 10px;
+  color: #555;
+  margin-top: 2px;
+}
+
+.modal-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 10px 0;
+  border-top: 1px solid #222;
+  margin-top: 2px;
+}
+
+.modal-total-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #888;
+}
+
+.modal-total-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+}
+
+/* ── Status badge in modal ──────────────────────────── */
+.modal-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Loading / error states ─────────────────────────── */
+.orders-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #444;
+  font-size: 13px;
+}
+
+.orders-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f87171;
+  font-size: 13px;
+}
