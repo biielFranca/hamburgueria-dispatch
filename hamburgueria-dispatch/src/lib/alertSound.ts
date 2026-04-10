@@ -73,29 +73,68 @@ async function playImmediate(level: AlertLevel): Promise<void> {
 function playFallback(level: AlertLevel) {
   try {
     const ctx = new AudioContext()
-    const configs = {
-      '5min':     { freq: 520, vol: 0.25, count: 1, gap: 0,    dur: 0.25 },
-      '1min':     { freq: 700, vol: 0.45, count: 2, gap: 0.28, dur: 0.18 },
-      'critical': { freq: 900, vol: 0.65, count: 3, gap: 0.20, dur: 0.14 },
-    }
-    const { freq, vol, count, gap, dur } = configs[level]
 
-    for (let i = 0; i < count; i++) {
+    // Each level: array of { freq, vol, dur } pulses played in sequence
+    // Minimum total duration: 5min ≥ 3s, 1min ≥ 4s, critical ≥ 5s
+    const PATTERNS: Record<AlertLevel, { freq: number; vol: number; dur: number; gap: number }[]> = {
+      '5min': [
+        // 3 moderate double-beeps, total ≈ 3.6s
+        { freq: 520, vol: 0.30, dur: 0.35, gap: 0.15 },
+        { freq: 560, vol: 0.30, dur: 0.35, gap: 0.45 },
+        { freq: 520, vol: 0.30, dur: 0.35, gap: 0.15 },
+        { freq: 560, vol: 0.30, dur: 0.35, gap: 0.45 },
+        { freq: 520, vol: 0.30, dur: 0.35, gap: 0.15 },
+        { freq: 560, vol: 0.30, dur: 0.35, gap: 0 },
+      ],
+      '1min': [
+        // Urgent repeating beeps, total ≈ 4.2s
+        { freq: 700, vol: 0.50, dur: 0.25, gap: 0.10 },
+        { freq: 750, vol: 0.50, dur: 0.25, gap: 0.30 },
+        { freq: 700, vol: 0.50, dur: 0.25, gap: 0.10 },
+        { freq: 750, vol: 0.50, dur: 0.25, gap: 0.30 },
+        { freq: 700, vol: 0.50, dur: 0.25, gap: 0.10 },
+        { freq: 750, vol: 0.50, dur: 0.25, gap: 0.30 },
+        { freq: 700, vol: 0.55, dur: 0.30, gap: 0.10 },
+        { freq: 800, vol: 0.55, dur: 0.30, gap: 0 },
+      ],
+      'critical': [
+        // Intense alarm pattern, total ≈ 5.4s
+        { freq: 880, vol: 0.70, dur: 0.20, gap: 0.08 },
+        { freq: 660, vol: 0.70, dur: 0.20, gap: 0.08 },
+        { freq: 880, vol: 0.70, dur: 0.20, gap: 0.08 },
+        { freq: 660, vol: 0.70, dur: 0.20, gap: 0.28 },
+        { freq: 880, vol: 0.70, dur: 0.20, gap: 0.08 },
+        { freq: 660, vol: 0.70, dur: 0.20, gap: 0.08 },
+        { freq: 880, vol: 0.70, dur: 0.20, gap: 0.08 },
+        { freq: 660, vol: 0.70, dur: 0.20, gap: 0.28 },
+        { freq: 900, vol: 0.75, dur: 0.20, gap: 0.08 },
+        { freq: 680, vol: 0.75, dur: 0.20, gap: 0.08 },
+        { freq: 900, vol: 0.75, dur: 0.20, gap: 0.08 },
+        { freq: 680, vol: 0.75, dur: 0.20, gap: 0 },
+      ],
+    }
+
+    const pulses = PATTERNS[level]
+    const oscType: OscillatorType = level === 'critical' ? 'square' : 'sine'
+    let t = ctx.currentTime + 0.05
+
+    for (const { freq, vol, dur, gap } of pulses) {
       const osc  = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.connect(gain)
       gain.connect(ctx.destination)
-      osc.type = level === 'critical' ? 'square' : 'sine'
+      osc.type = oscType
       osc.frequency.value = freq
-      const t = ctx.currentTime + i * (dur + gap)
       gain.gain.setValueAtTime(0, t)
-      gain.gain.linearRampToValueAtTime(vol, t + 0.01)
-      gain.gain.exponentialRampToValueAtTime(0.001, t + dur)
+      gain.gain.linearRampToValueAtTime(vol, t + 0.015)
+      gain.gain.setValueAtTime(vol, t + dur - 0.03)
+      gain.gain.linearRampToValueAtTime(0, t + dur)
       osc.start(t)
       osc.stop(t + dur)
+      t += dur + gap
     }
 
-    setTimeout(() => ctx.close(), (count * (dur + gap) + 1) * 1000)
+    setTimeout(() => ctx.close(), (t - ctx.currentTime + 1) * 1000)
   } catch {
     // AudioContext unavailable — silently ignore
   }

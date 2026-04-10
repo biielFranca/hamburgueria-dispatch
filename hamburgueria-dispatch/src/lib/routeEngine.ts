@@ -96,12 +96,16 @@ async function handleTimeouts(orders: Order[], storeId: string) {
         .eq('id', order.id)
 
       // Insert a timeout alert in a dedicated alerts table if it exists — best effort
-      await supabase.from('dispatch_alerts').insert({
-        store_id:  storeId,
-        order_id:  order.id,
-        alert_type: 'dispatch_timeout',
-        message:   `Pedido ${order.platform_order_code ?? order.id.slice(0, 8)} atingiu ${MAX_REJECTIONS} recusas sem agrupamento.`,
-      }).maybeSingle().catch(() => {})
+      try {
+        await supabase.from('dispatch_alerts').insert({
+          store_id: storeId,
+          order_id: order.id,
+          alert_type: 'dispatch_timeout',
+          message: `Pedido ${order.platform_order_code ?? order.id.slice(0, 8)} atingiu ${MAX_REJECTIONS} recusas sem agrupamento.`,
+        }).maybeSingle()
+      } catch {
+        // best effort
+      }
     }
   }
 }

@@ -6,7 +6,6 @@ import Orders from './pages/Orders'
 import Operational from './pages/Operational'
 import Drivers from './pages/Drivers'
 import UsersPage from './pages/Users'
-import Integrations from './pages/Integrations'
 import Dev from './pages/Dev'
 import Settings from './pages/Settings'
 import AlertSystem from './components/AlertSystem'
@@ -14,9 +13,11 @@ import IfoodPoller from './components/IfoodPoller'
 import ClassifierService from './components/ClassifierService'
 import RouteEngineService from './components/RouteEngineService'
 import type { Session } from '@supabase/supabase-js'
-import type { UserRole } from './types'
+import type { UserPermissions, UserRole } from './types'
 
-export type Page = 'operational' | 'orders' | 'drivers' | 'users' | 'integrations' | 'dev' | 'settings'
+export type Page = 'operational' | 'orders' | 'drivers' | 'users' | 'dev' | 'settings'
+
+const DEFAULT_PERMISSIONS: UserPermissions = { operational: true, orders: true, drivers: true }
 
 const SESSION_DURATION = 8 * 60 * 60 * 1000  // 8 hours in ms
 
@@ -26,6 +27,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<Page>('operational')
   const [sessionExpired, setSessionExpired] = useState(false)
   const [userRole, setUserRole]     = useState<UserRole | null>(null)
+  const [permissions, setPermissions] = useState<UserPermissions>(DEFAULT_PERMISSIONS)
 
   async function signOut(expired = false) {
     localStorage.removeItem('dispatch_login_at')
@@ -43,8 +45,11 @@ export default function App() {
 
   async function fetchUserRole(authId: string) {
     const { data } = await supabase
-      .from('users').select('role').eq('auth_id', authId).single()
-    if (data) setUserRole(data.role as UserRole)
+      .from('users').select('role, permissions').eq('auth_id', authId).single()
+    if (data) {
+      setUserRole(data.role as UserRole)
+      setPermissions(data.permissions ?? DEFAULT_PERMISSIONS)
+    }
   }
 
   useEffect(() => {
@@ -58,6 +63,7 @@ export default function App() {
       if (event === 'SIGNED_OUT' || (!session && event === 'TOKEN_REFRESHED')) {
         setSession(null)
         setUserRole(null)
+        setPermissions(DEFAULT_PERMISSIONS)
         return
       }
       setSession(session)
@@ -78,10 +84,23 @@ export default function App() {
     await signOut(false)
   }
 
+  const isOwner = userRole === 'owner' || userRole === 'admin'
+
+  function hasAccess(page: Page): boolean {
+    if (page === 'users'    && !isOwner) return false
+    if (page === 'dev'      && userRole !== 'owner') return false
+    if (page === 'settings' && userRole !== 'owner') return false
+    // permission-based pages (non-owner operators)
+    if (!isOwner) {
+      if (page === 'operational' && !permissions.operational) return false
+      if (page === 'orders'      && !permissions.orders)      return false
+      if (page === 'drivers'     && !permissions.drivers)     return false
+    }
+    return true
+  }
+
   function handleNavigate(page: Page) {
-    if (page === 'users'         && userRole !== 'owner' && userRole !== 'admin') return
-    if (page === 'integrations'  && userRole !== 'owner' && userRole !== 'admin') return
-    if (page === 'settings'      && userRole !== 'owner') return
+    if (!hasAccess(page)) return
     setActivePage(page)
   }
 
@@ -112,8 +131,9 @@ export default function App() {
         activePage={activePage}
         onNavigate={handleNavigate}
         onLogout={handleLogout}
-        isOwner={userRole === 'owner' || userRole === 'admin'}
+        isOwner={isOwner}
         userRole={userRole}
+        permissions={permissions}
       />
       <main style={{
         marginLeft: '60px',
@@ -122,13 +142,12 @@ export default function App() {
         overflow: 'hidden',
         backgroundColor: '#0f0f0f'
       }}>
-        {activePage === 'operational' && <Operational />}
-        {activePage === 'orders'      && <Orders />}
-        {activePage === 'drivers'     && <Drivers />}
-        {activePage === 'users'         && (userRole === 'owner' || userRole === 'admin') && <UsersPage />}
-        {activePage === 'integrations'  && (userRole === 'owner' || userRole === 'admin') && <Integrations />}
-        {activePage === 'dev'           && <Dev />}
-        {activePage === 'settings'      && userRole === 'owner' && <Settings />}
+        {activePage === 'operational' && hasAccess('operational') && <Operational />}
+        {activePage === 'orders'      && hasAccess('orders')      && <Orders />}
+        {activePage === 'drivers'     && hasAccess('drivers')     && <Drivers />}
+        {activePage === 'users'       && hasAccess('users')       && <UsersPage />}
+        {activePage === 'dev'         && hasAccess('dev')         && <Dev />}
+        {activePage === 'settings'    && hasAccess('settings')    && <Settings />}
         <AlertSystem />
         <IfoodPoller />
         <ClassifierService />

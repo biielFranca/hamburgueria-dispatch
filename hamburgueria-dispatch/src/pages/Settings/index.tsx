@@ -1,26 +1,64 @@
-import { useEffect, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import { useEffect, useState } from 'react'
+import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { supabase } from '../../lib/supabase'
+import { syncIfood } from '../../lib/ifood'
+import { fetchAddressByCep } from '../../lib/cep'
 import type { Store } from '../../types'
 import './Settings.css'
 
-// Fix default leaflet marker icons
 delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-// ── Map click handler ─────────────────────────────────────────────────────────
+type SettingsTab = 'general' | 'connections' | 'plan'
 
-function MapClickHandler({
-  onMapClick,
-}: {
-  onMapClick: (lat: number, lng: number) => void
-}) {
+interface Integration {
+  id?: string
+  store_id: string
+  platform: string
+  client_id: string
+  active: boolean
+  last_sync_at: string | null
+  last_error: string | null
+}
+
+const PLATFORM_DEFS = [
+  {
+    key: 'ifood',
+    label: 'iFood',
+    color: '#EA1D2C',
+    description: 'Recebe pedidos automaticamente via Merchant API',
+    disabled: false,
+  },
+  {
+    key: 'keeta',
+    label: 'Keeta',
+    color: '#27AE60',
+    description: 'Em breve',
+    disabled: true,
+  },
+  {
+    key: '99food',
+    label: '99Food',
+    color: '#F5A623',
+    description: 'Em breve',
+    disabled: true,
+  },
+  {
+    key: 'cardapio_web',
+    label: 'Cardápio Web',
+    color: '#8B5CF6',
+    description: 'Em breve',
+    disabled: true,
+  },
+]
+
+function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
   useMapEvents({
     click(e) {
       onMapClick(e.latlng.lat, e.latlng.lng)
@@ -29,36 +67,194 @@ function MapClickHandler({
   return null
 }
 
-// ── Settings page ─────────────────────────────────────────────────────────────
+function IntegrationCard({
+  def,
+  integration,
+  storeId,
+  onSaved,
+}: {
+  def: typeof PLATFORM_DEFS[0]
+  integration: Integration | null
+  storeId: string
+  onSaved: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [clientId, setClientId] = useState(integration?.client_id ?? '')
+  const [active, setActive] = useState(integration?.active ?? false)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [error, setError] = useState('')
+  const [testResult, setTestResult] = useState<string | null>(null)
 
-export default function Settings() {
-  const [store, setStore]       = useState<Store | null>(null)
-  const [loading, setLoading]   = useState(true)
-  const [saving, setSaving]     = useState(false)
+  useEffect(() => {
+    if (integration) {
+      setClientId(integration.client_id)
+      setActive(integration.active)
+    }
+  }, [integration])
+
+  async function handleSave() {
+    if (!clientId.trim()) {
+      setError('Preencha Client ID')
+      return
+    }
+    setSaving(true)
+    setError('')
+    const payload: Record<string, unknown> = {
+      store_id: storeId,
+      platform: def.key,
+      client_id: clientId.trim(),
+      active,
+    }
+    const { error: dbError } = integration?.id
+      ? await supabase.from('store_integrations').update(payload).eq('id', integration.id)
+      : await supabase.from('store_integrations').upsert(payload, { onConflict: 'store_id,platform' })
+
+    setSaving(false)
+    if (dbError) {
+      setError(dbError.message)
+      return
+    }
+    onSaved()
+    setExpanded(false)
+  }
+
+  async function handleTest() {
+    if (!clientId.trim()) {
+      setError('Preencha Client ID antes de testar')
+      return
+    }
+
+    setTesting(true)
+    setError('')
+    setTestResult(null)
+
+    try {
+      const result = await syncIfood(storeId)
+      setTestResult(`✓ Sync ok - ${result.events} evento(s), ${result.inserted} inserido(s)`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+
+    setTesting(false)
+  }
+
+  const isConfigured = Boolean(integration?.client_id)
+  const lastSync = integration?.last_sync_at ? new Date(integration.last_sync_at).toLocaleString('pt-BR') : null
+
+  if (def.disabled) {
+    return (
+      <div className="int-card int-card-disabled">
+        <div className="int-card-header">
+          <div className="int-card-left">
+            <span className="int-platform-dot" style={{ background: def.color }} />
+            <span className="int-platform-name" style={{ color: def.color }}>{def.label}</span>
+          </div>
+          <span className="int-badge int-badge-soon">Em breve</span>
+        </div>
+        <p className="int-description">{def.description}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`int-card ${isConfigured ? 'int-card-configured' : ''}`}>
+      <div className="int-card-header" onClick={() => setExpanded(v => !v)}>
+        <div className="int-card-left">
+          <span className="int-platform-dot" style={{ background: def.color }} />
+          <span className="int-platform-name" style={{ color: def.color }}>{def.label}</span>
+          {isConfigured && (
+            <span className={`int-badge ${active ? 'int-badge-active' : 'int-badge-inactive'}`}>
+              {active ? 'Ativo' : 'Inativo'}
+            </span>
+          )}
+        </div>
+        <div className="int-card-right">
+          {lastSync && <span className="int-last-sync">sync {lastSync}</span>}
+          {integration?.last_error && <span className="int-error-dot" title={integration.last_error} />}
+          <svg
+            className={`int-chevron ${expanded ? 'open' : ''}`}
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+      </div>
+
+      <p className="int-description">{def.description}</p>
+
+      {expanded && (
+        <div className="int-form">
+          <div className="int-field">
+            <label>Client ID</label>
+            <input
+              className="int-input"
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              value={clientId}
+              onChange={e => setClientId(e.target.value)}
+            />
+          </div>
+          <div className="int-field">
+            <label>Client Secret</label>
+            <input
+              className="int-input"
+              value="Gerenciado no backend"
+              readOnly
+              title="Client Secret não é exposto no frontend"
+            />
+          </div>
+          <div className="int-field-row">
+            <label>Recebimento automático</label>
+            <button className={`int-toggle ${active ? 'on' : 'off'}`} onClick={() => setActive(v => !v)}>
+              <span className="int-toggle-knob" />
+              <span className="int-toggle-label">{active ? 'Ativado' : 'Desativado'}</span>
+            </button>
+          </div>
+          {error && <p className="int-error">{error}</p>}
+          {testResult && <p className="int-success">{testResult}</p>}
+          <div className="int-actions">
+            <button className="int-btn-test" onClick={handleTest} disabled={testing || saving}>
+              {testing ? 'Testando...' : 'Testar conexão'}
+            </button>
+            <button className="int-btn-save" onClick={handleSave} disabled={saving || testing}>
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TabGeneral({ storeId }: { storeId: string }) {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [cepLoading, setCepLoading] = useState(false)
+  const [cepError, setCepError] = useState<string | null>(null)
 
-  const [name, setName]       = useState('')
+  const [name, setName] = useState('')
   const [address, setAddress] = useState('')
-  const [phone, setPhone]     = useState('')
-  const [lat, setLat]         = useState('')
-  const [lng, setLng]         = useState('')
-
-  const storeIdRef = useRef<string | null>(null)
+  const [phone, setPhone] = useState('')
+  const [cep, setCep] = useState('')
+  const [lat, setLat] = useState('')
+  const [lng, setLng] = useState('')
 
   useEffect(() => {
     async function load() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) { setLoading(false); return }
-      storeIdRef.current = userData.store_id
-
       const { data: storeData } = await supabase
-        .from('stores').select('*').eq('id', userData.store_id).single()
+        .from('stores')
+        .select('id,name,address,phone,latitude,longitude,active,created_at')
+        .eq('id', storeId)
+        .single()
       if (storeData) {
         const s = storeData as Store
-        setStore(s)
         setName(s.name ?? '')
         setAddress(s.address ?? '')
         setPhone(s.phone ?? '')
@@ -68,41 +264,69 @@ export default function Settings() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [storeId])
 
   function handleMapClick(latitude: number, longitude: number) {
     setLat(latitude.toFixed(7))
     setLng(longitude.toFixed(7))
   }
 
+  async function handleCepChange(raw: string) {
+    setCep(raw)
+    setCepError(null)
+    const digits = raw.replace(/\D/g, '')
+    if (digits.length !== 8) return
+    setCepLoading(true)
+    try {
+      const result = await fetchAddressByCep(digits)
+      setAddress(`${result.street}, ${result.neighborhood}, ${result.city} - ${result.state}`)
+    } catch (e) {
+      setCepError(e instanceof Error ? e.message : 'CEP inválido')
+    }
+    setCepLoading(false)
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!storeIdRef.current) return
-    setSaving(true)
-    setFeedback(null)
 
+    const cleanPhone = phone.replace(/[^\d+]/g, '')
     const parsedLat = lat !== '' ? parseFloat(lat) : null
     const parsedLng = lng !== '' ? parseFloat(lng) : null
 
+    if (cleanPhone && !/^\+?\d{10,14}$/.test(cleanPhone)) {
+      setFeedback({ type: 'error', msg: 'Telefone inválido' })
+      return
+    }
+    if (lat && !/^[-+]?\d+(\.\d+)?$/.test(lat)) {
+      setFeedback({ type: 'error', msg: 'Latitude inválida' })
+      return
+    }
+    if (lng && !/^[-+]?\d+(\.\d+)?$/.test(lng)) {
+      setFeedback({ type: 'error', msg: 'Longitude inválida' })
+      return
+    }
+
+    setSaving(true)
+    setFeedback(null)
     const { error } = await supabase
       .from('stores')
       .update({
-        name,
-        address,
-        phone: phone || null,
-        latitude:  parsedLat,
+        name: name.trim(),
+        address: address.trim(),
+        phone: cleanPhone || null,
+        latitude: parsedLat,
         longitude: parsedLng,
       })
-      .eq('id', storeIdRef.current)
-
+      .eq('id', storeId)
     setSaving(false)
+
     if (error) {
       setFeedback({ type: 'error', msg: `Erro ao salvar: ${error.message}` })
-    } else {
-      setStore(prev => prev ? { ...prev, name, address, phone: phone || undefined, latitude: parsedLat ?? undefined, longitude: parsedLng ?? undefined } : prev)
-      setFeedback({ type: 'success', msg: 'Configurações salvas com sucesso!' })
-      setTimeout(() => setFeedback(null), 4000)
+      return
     }
+
+    setFeedback({ type: 'success', msg: 'Configurações salvas com sucesso!' })
+    setTimeout(() => setFeedback(null), 4000)
   }
 
   const markerPos: [number, number] | null =
@@ -113,6 +337,186 @@ export default function Settings() {
   const mapCenter: [number, number] = markerPos ?? [-23.55, -46.63]
 
   if (loading) {
+    return <div className="settings-tab-loading">Carregando...</div>
+  }
+
+  return (
+    <div className="settings-body">
+      <form className="settings-form" onSubmit={handleSave}>
+        <div className="settings-field">
+          <label htmlFor="store-name">Nome da loja</label>
+          <input id="store-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Nome da loja" required />
+        </div>
+        <div className="settings-field">
+          <label htmlFor="store-cep">CEP</label>
+          <input id="store-cep" type="text" value={cep} onChange={e => handleCepChange(e.target.value)} placeholder="00000-000" maxLength={9} />
+          {cepLoading && <span className="settings-cep-hint">Buscando...</span>}
+          {cepError   && <span className="settings-cep-error">{cepError}</span>}
+        </div>
+        <div className="settings-field">
+          <label htmlFor="store-address">Endereço</label>
+          <input id="store-address" type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Rua, número, bairro (preenchido pelo CEP)" />
+        </div>
+        <div className="settings-field">
+          <label htmlFor="store-phone">Telefone</label>
+          <input id="store-phone" type="text" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(11) 99999-9999" />
+        </div>
+        <div className="settings-coords">
+          <div className="settings-field">
+            <label htmlFor="store-lat">Latitude</label>
+            <input id="store-lat" type="text" value={lat} onChange={e => setLat(e.target.value)} placeholder="-23.5505" />
+          </div>
+          <div className="settings-field">
+            <label htmlFor="store-lng">Longitude</label>
+            <input id="store-lng" type="text" value={lng} onChange={e => setLng(e.target.value)} placeholder="-46.6333" />
+          </div>
+        </div>
+        <p className="settings-map-hint">Clique no mapa para posicionar o pin e preencher latitude/longitude automaticamente.</p>
+        {feedback && <div className={`settings-feedback ${feedback.type}`}>{feedback.msg}</div>}
+        <button type="submit" className="settings-save-btn" disabled={saving}>
+          {saving ? 'Salvando...' : 'Salvar configurações'}
+        </button>
+      </form>
+
+      <div className="settings-map-wrap">
+        <MapContainer center={mapCenter} zoom={markerPos ? 15 : 12} className="settings-map" key={`${mapCenter[0]}-${mapCenter[1]}`}>
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          />
+          <MapClickHandler onMapClick={handleMapClick} />
+          {markerPos && <Marker position={markerPos} />}
+        </MapContainer>
+      </div>
+    </div>
+  )
+}
+
+function TabConnections({ storeId }: { storeId: string }) {
+  const [integrations, setIntegrations] = useState<Integration[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchIntegrations()
+  }, [storeId])
+
+  async function fetchIntegrations() {
+    const { data } = await supabase
+      .from('store_integrations')
+      .select('id,store_id,platform,client_id,active,last_sync_at,last_error')
+      .eq('store_id', storeId)
+      .limit(20)
+    setIntegrations((data ?? []) as Integration[])
+    setLoading(false)
+  }
+
+  if (loading) {
+    return <div className="settings-tab-loading">Carregando...</div>
+  }
+
+  return (
+    <div className="settings-connections">
+      <p className="settings-connections-desc">
+        Configure as plataformas para recebimento automático de pedidos. O status de conexão do iFood é exibido aqui.
+      </p>
+      <div className="int-content">
+        {PLATFORM_DEFS.map(def => {
+          const integration = integrations.find(i => i.platform === def.key) ?? null
+          return (
+            <IntegrationCard
+              key={def.key}
+              def={def}
+              integration={integration}
+              storeId={storeId}
+              onSaved={fetchIntegrations}
+            />
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function TabPlan() {
+  const PLAN = {
+    name: 'Dispatch Pro',
+    expiresAt: '2026-12-31',
+    features: [
+      'Painel operacional em tempo real',
+      'Motor de rotas com agrupamento automático',
+      'Integração iFood (Merchant API)',
+      'Integração 99Food, Keeta e Cardápio Web (em breve)',
+      'Alertas de atraso com sons configuráveis',
+      'Gestão de motoboys',
+      'Múltiplos operadores',
+    ],
+  }
+
+  const expiry = new Date(PLAN.expiresAt).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+
+  return (
+    <div className="settings-plan">
+      <div className="plan-card">
+        <div className="plan-card-header">
+          <div>
+            <div className="plan-name">{PLAN.name}</div>
+            <div className="plan-expiry">Válido até {expiry}</div>
+          </div>
+          <span className="plan-badge">Ativo</span>
+        </div>
+
+        <div className="plan-divider" />
+
+        <div className="plan-features-title">Recursos incluídos</div>
+        <ul className="plan-features">
+          {PLAN.features.map((f, i) => (
+            <li key={i} className="plan-feature-item">
+              <svg width="14" height="14" fill="none" stroke="#4ade80" strokeWidth="2.5" viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              {f}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+export default function Settings() {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const [storeId, setStoreId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function init() {
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) {
+        setLoading(false)
+        return
+      }
+      const { data: userData } = await supabase
+        .from('users')
+        .select('store_id')
+        .eq('auth_id', authData.user.id)
+        .single()
+      if (userData) setStoreId(userData.store_id)
+      setLoading(false)
+    }
+    init()
+  }, [])
+
+  const TABS: { key: SettingsTab; label: string }[] = [
+    { key: 'general', label: 'Configurações Gerais' },
+    { key: 'connections', label: 'Conexões' },
+    { key: 'plan', label: 'Meu Plano' },
+  ]
+
+  if (loading) {
     return <div className="settings-loading">Carregando configurações...</div>
   }
 
@@ -120,102 +524,25 @@ export default function Settings() {
     <div className="settings-page">
       <div className="settings-header">
         <h1>Configurações da Loja</h1>
-        <p className="settings-subtitle">
-          Gerencie as informações da sua loja. Clique no mapa para definir a localização.
-        </p>
       </div>
 
-      <div className="settings-body">
-        {/* Form */}
-        <form className="settings-form" onSubmit={handleSave}>
-          <div className="settings-field">
-            <label htmlFor="store-name">Nome da loja</label>
-            <input
-              id="store-name"
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Nome da loja"
-              required
-            />
-          </div>
-
-          <div className="settings-field">
-            <label htmlFor="store-address">Endereço</label>
-            <input
-              id="store-address"
-              type="text"
-              value={address}
-              onChange={e => setAddress(e.target.value)}
-              placeholder="Rua, número, bairro"
-            />
-          </div>
-
-          <div className="settings-field">
-            <label htmlFor="store-phone">Telefone</label>
-            <input
-              id="store-phone"
-              type="text"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="(11) 99999-9999"
-            />
-          </div>
-
-          <div className="settings-coords">
-            <div className="settings-field">
-              <label htmlFor="store-lat">Latitude</label>
-              <input
-                id="store-lat"
-                type="text"
-                value={lat}
-                onChange={e => setLat(e.target.value)}
-                placeholder="-23.5505"
-              />
-            </div>
-            <div className="settings-field">
-              <label htmlFor="store-lng">Longitude</label>
-              <input
-                id="store-lng"
-                type="text"
-                value={lng}
-                onChange={e => setLng(e.target.value)}
-                placeholder="-46.6333"
-              />
-            </div>
-          </div>
-
-          <p className="settings-map-hint">
-            Clique no mapa para posicionar o pin e preencher latitude/longitude automaticamente.
-          </p>
-
-          {feedback && (
-            <div className={`settings-feedback ${feedback.type}`}>
-              {feedback.msg}
-            </div>
-          )}
-
-          <button type="submit" className="settings-save-btn" disabled={saving}>
-            {saving ? 'Salvando...' : 'Salvar configurações'}
-          </button>
-        </form>
-
-        {/* Map */}
-        <div className="settings-map-wrap">
-          <MapContainer
-            center={mapCenter}
-            zoom={markerPos ? 15 : 12}
-            className="settings-map"
-            key={`${mapCenter[0]}-${mapCenter[1]}`}
+      <div className="settings-tabs">
+        {TABS.map(tab => (
+          <button
+            key={tab.key}
+            className={`settings-tab-btn ${activeTab === tab.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.key)}
           >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            />
-            <MapClickHandler onMapClick={handleMapClick} />
-            {markerPos && <Marker position={markerPos} />}
-          </MapContainer>
-        </div>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="settings-tab-content">
+        {activeTab === 'general' && storeId && <TabGeneral storeId={storeId} />}
+        {activeTab === 'connections' && storeId && <TabConnections storeId={storeId} />}
+        {activeTab === 'plan' && <TabPlan />}
+        {!storeId && <div className="settings-tab-loading">Loja não encontrada.</div>}
       </div>
     </div>
   )

@@ -6,11 +6,6 @@ export interface IfoodSyncResult {
   errors:   string[]
 }
 
-export interface IfoodTestResult {
-  ok:     boolean
-  events: number
-}
-
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ifood-sync`
 const ANON   = import.meta.env.VITE_SUPABASE_ANON_KEY
 
@@ -41,13 +36,4 @@ export async function syncIfood(storeId: string): Promise<IfoodSyncResult> {
   const data = await callFn({ storeId })
   if (!data.ok && data.error) throw new Error(data.error)
   return data as IfoodSyncResult
-}
-
-export async function testIfoodCredentials(
-  clientId: string,
-  clientSecret: string,
-): Promise<IfoodTestResult> {
-  const data = await callFn({ testMode: true, clientId, clientSecret })
-  if (!data.ok) throw new Error(data.error ?? 'Falha ao conectar com o iFood')
-  return data as IfoodTestResult
 }

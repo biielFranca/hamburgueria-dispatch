@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { fetchAddressByCep } from '../../lib/cep'
 import type { DeliveryType, LogisticsType, OrderItem, Platform } from '../../types'
 import './OrderForm.css'
 
@@ -142,6 +143,8 @@ export default function OrderForm({ open, onClose, onCreated }: OrderFormProps) 
   const [form, setForm]         = useState<FormState>(DEFAULT_FORM)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]       = useState<string | null>(null)
+  const [cepLoading, setCepLoading] = useState(false)
+  const [cepError, setCepError]     = useState<string | null>(null)
   const storeIdRef              = useRef<string | null>(null)
   const firstInputRef           = useRef<HTMLInputElement>(null)
 
@@ -180,6 +183,27 @@ export default function OrderForm({ open, onClose, onCreated }: OrderFormProps) 
 
   function set(field: keyof FormState, value: string) {
     setForm(f => ({ ...f, [field]: value }))
+  }
+
+  async function handleCepChange(raw: string) {
+    set('address_zip', raw)
+    setCepError(null)
+    const digits = raw.replace(/\D/g, '')
+    if (digits.length !== 8) return
+    setCepLoading(true)
+    try {
+      const result = await fetchAddressByCep(digits)
+      setForm(f => ({
+        ...f,
+        address_street:       result.street,
+        address_neighborhood: result.neighborhood,
+        address_city:         result.city,
+        address_number:       '',
+      }))
+    } catch (e) {
+      setCepError(e instanceof Error ? e.message : 'CEP inválido')
+    }
+    setCepLoading(false)
   }
 
   function setItem(id: number, field: keyof ItemDraft, value: string) {
@@ -365,11 +389,13 @@ export default function OrderForm({ open, onClose, onCreated }: OrderFormProps) 
               <div className="form-group" style={{ maxWidth: 130 }}>
                 <label className="form-label">CEP</label>
                 <input
-                  className="form-input"
+                  className={`form-input ${cepError ? 'error' : ''}`}
                   placeholder="00000-000"
                   value={form.address_zip}
-                  onChange={e => set('address_zip', e.target.value)}
+                  onChange={e => handleCepChange(e.target.value)}
                 />
+                {cepLoading && <span className="form-cep-hint">Buscando...</span>}
+                {cepError   && <span className="form-cep-error">{cepError}</span>}
               </div>
             </div>
           </div>

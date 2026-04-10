@@ -145,13 +145,67 @@ Banco validado:
 
 ---
 
+---
+
+## ✅ Bloco 2 — Configurações da loja (reestruturação)
+
+### Tarefas (tabs + remoção de Integrações separado)
+**Status:** Concluídas
+
+- Página Settings reconstruída com 3 abas: **Configurações Gerais**, **Conexões**, **Meu Plano**
+- TabGeneral: formulário + mapa Leaflet (existente, migrado para dentro da aba)
+- TabConnections: IntegrationCard absorvido do antigo `Integrations/index.tsx` — status iFood apenas aqui
+- TabPlan: informações estáticas do plano atual
+- Página `src/pages/Integrations/index.tsx` removida da navegação (App.tsx + Sidebar)
+- `integrations` removido do tipo `Page` e de todos os guards
+
+---
+
+## ✅ Bloco 7 — Sons dos alertas (atualização)
+
+### Tarefa: Sons mais longos e chamativos
+**Status:** Concluída
+
+Fallback Web Audio API reescrito em `src/lib/alertSound.ts`:
+- `5min`: 6 pulsos em pares, duração ≈ 3.6s
+- `1min`: 8 pulsos urgentes, duração ≈ 4.2s
+- `critical`: 12 pulsos alternados intensos, duração ≈ 5.4s
+- Envelope com attack/release correto (não bipes abruptos)
+
+---
+
+## ✅ Bloco 8 — Busca de endereço por CEP
+
+### Tarefas
+**Status:** Concluídas
+
+- Criado `src/lib/cep.ts` com `fetchAddressByCep(cep)` via ViaCEP
+- Aplicado no `OrderForm`: campo CEP com auto-preenchimento de rua, bairro, cidade; número fica em branco
+- Aplicado em `Settings/TabGeneral`: campo CEP preenche automaticamente o campo de endereço
+- Feedback visual: "Buscando..." durante a consulta, mensagem de erro inline em caso de CEP inválido
+
+---
+
+## ✅ Bloco 9 — Permissões por cadastro
+
+### Tarefas
+**Status:** Concluídas
+
+- Migration `add_permissions_to_users`: coluna `permissions jsonb NOT NULL DEFAULT '{"operational":true,"orders":true,"drivers":true}'`
+- Tipo `UserPermissions` adicionado em `src/types/index.ts`
+- `EditModal` em `Users/index.tsx`: seção de permissões com checkboxes visível apenas para owner/admin
+- `App.tsx`: carrega `permissions` junto com `role`, função `hasAccess()` guarda cada página
+- `Sidebar.tsx`: botões de Painel Operacional, Pedidos e Motoristas ocultados conforme permissões do operador
+
+---
+
 ## Resumo
 
 ════════════════════════════════════════
          EXECUÇÃO CONCLUÍDA
 ════════════════════════════════════════
-✅ Concluídas: 52/52
-❌ Falhas:      0/52
+✅ Concluídas: 64/64 (52 originais + 12 novos)
+❌ Falhas:      0/64
 
 Arquivos criados/modificados:
 - .gitignore (raiz + hamburgueria-dispatch)

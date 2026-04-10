@@ -581,3 +581,38 @@
 
 .um-btn-save:hover    { background: #eee; }
 .um-btn-save:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Permissions ─────────────────────────────────────── */
+.um-perm-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #555;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.um-perms {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.um-perm-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: #ccc;
+  cursor: pointer;
+  user-select: none;
+}
+
+.um-perm-check {
+  width: 15px;
+  height: 15px;
+  accent-color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+}

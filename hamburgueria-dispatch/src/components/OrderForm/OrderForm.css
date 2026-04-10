@@ -382,3 +382,17 @@
   border: 1px solid rgba(239,68,68,0.2);
   border-radius: 6px;
 }
+
+.form-cep-hint {
+  font-size: 11px;
+  color: #666;
+  margin-top: 3px;
+  display: block;
+}
+
+.form-cep-error {
+  font-size: 11px;
+  color: #f87171;
+  margin-top: 3px;
+  display: block;
+}

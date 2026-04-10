@@ -1,23 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { supabaseAdmin } from '../../lib/supabase'
-import { syncIfood, testIfoodCredentials } from '../../lib/ifood'
+import { syncIfood } from '../../lib/ifood'
 import './Integrations.css'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Integration {
   id?: string
   store_id: string
   platform: string
   client_id: string
-  client_secret: string
   active: boolean
   last_sync_at: string | null
   last_error: string | null
 }
-
-// ── Platform definitions ──────────────────────────────────────────────────────
 
 const PLATFORM_DEFS = [
   {
@@ -51,8 +45,6 @@ const PLATFORM_DEFS = [
   },
 ]
 
-// ── Integration card ──────────────────────────────────────────────────────────
-
 interface CardProps {
   def: typeof PLATFORM_DEFS[0]
   integration: Integration | null
@@ -61,72 +53,75 @@ interface CardProps {
 }
 
 function IntegrationCard({ def, integration, storeId, onSaved }: CardProps) {
-  const [expanded,    setExpanded]    = useState(false)
-  const [clientId,    setClientId]    = useState(integration?.client_id ?? '')
-  const [clientSecret,setClientSecret]= useState(integration?.client_secret ?? '')
-  const [active,      setActive]      = useState(integration?.active ?? false)
-  const [saving,      setSaving]      = useState(false)
-  const [testing,     setTesting]     = useState(false)
-  const [error,       setError]       = useState('')
-  const [testResult,  setTestResult]  = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [clientId, setClientId] = useState(integration?.client_id ?? '')
+  const [active, setActive] = useState(integration?.active ?? false)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [error, setError] = useState('')
+  const [testResult, setTestResult] = useState<string | null>(null)
 
   useEffect(() => {
     if (integration) {
       setClientId(integration.client_id)
-      setClientSecret(integration.client_secret)
       setActive(integration.active)
     }
   }, [integration])
 
   async function handleSave() {
-    if (!clientId.trim() || !clientSecret.trim()) {
-      setError('Preencha Client ID e Client Secret')
+    if (!clientId.trim()) {
+      setError('Preencha Client ID')
       return
     }
     setSaving(true)
     setError('')
 
-    const db = supabaseAdmin ?? supabase
-    const payload = {
-      store_id:      storeId,
-      platform:      def.key,
-      client_id:     clientId.trim(),
-      client_secret: clientSecret.trim(),
+    const payload: Record<string, unknown> = {
+      store_id: storeId,
+      platform: def.key,
+      client_id: clientId.trim(),
       active,
     }
-
     const { error: dbError } = integration?.id
-      ? await db.from('store_integrations').update(payload).eq('id', integration.id)
-      : await db.from('store_integrations').upsert(payload, { onConflict: 'store_id,platform' })
+      ? await supabase.from('store_integrations').update(payload).eq('id', integration.id)
+      : await supabase.from('store_integrations').upsert(payload, { onConflict: 'store_id,platform' })
 
     setSaving(false)
-    if (dbError) { setError(dbError.message); return }
+    if (dbError) {
+      setError(dbError.message)
+      return
+    }
+
     onSaved()
     setExpanded(false)
   }
 
   async function handleTest() {
-    if (!clientId.trim() || !clientSecret.trim()) {
-      setError('Preencha Client ID e Client Secret antes de testar')
+    if (!storeId) {
+      setError('Loja não identificada')
       return
     }
+    if (!clientId.trim()) {
+      setError('Preencha Client ID antes de testar')
+      return
+    }
+
     setTesting(true)
     setTestResult(null)
     setError('')
 
     try {
-      const result = await testIfoodCredentials(clientId.trim(), clientSecret.trim())
-      setTestResult(`✓ Credenciais válidas — ${result.events} evento(s) na fila`)
+      const result = await syncIfood(storeId)
+      setTestResult(`✓ Sync ok - ${result.events} evento(s), ${result.inserted} inserido(s)`)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
+
     setTesting(false)
   }
 
-  const isConfigured = !!(integration?.client_id)
-  const lastSync = integration?.last_sync_at
-    ? new Date(integration.last_sync_at).toLocaleString('pt-BR')
-    : null
+  const isConfigured = Boolean(integration?.client_id)
+  const lastSync = integration?.last_sync_at ? new Date(integration.last_sync_at).toLocaleString('pt-BR') : null
 
   if (def.disabled) {
     return (
@@ -157,15 +152,18 @@ function IntegrationCard({ def, integration, storeId, onSaved }: CardProps) {
         </div>
         <div className="int-card-right">
           {lastSync && <span className="int-last-sync">sync {lastSync}</span>}
-          {integration?.last_error && (
-            <span className="int-error-dot" title={integration.last_error} />
-          )}
+          {integration?.last_error && <span className="int-error-dot" title={integration.last_error} />}
           <svg
             className={`int-chevron ${expanded ? 'open' : ''}`}
-            width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
           >
-            <polyline points="6 9 12 15 18 9"/>
+            <polyline points="6 9 12 15 18 9" />
           </svg>
         </div>
       </div>
@@ -187,10 +185,9 @@ function IntegrationCard({ def, integration, storeId, onSaved }: CardProps) {
             <label>Client Secret</label>
             <input
               className="int-input"
-              type="password"
-              placeholder="••••••••••••••••"
-              value={clientSecret}
-              onChange={e => setClientSecret(e.target.value)}
+              value="Gerenciado no backend"
+              readOnly
+              title="Client Secret não é exposto no frontend"
             />
           </div>
 
@@ -209,18 +206,10 @@ function IntegrationCard({ def, integration, storeId, onSaved }: CardProps) {
           {testResult && <p className="int-success">{testResult}</p>}
 
           <div className="int-actions">
-            <button
-              className="int-btn-test"
-              onClick={handleTest}
-              disabled={testing || saving}
-            >
+            <button className="int-btn-test" onClick={handleTest} disabled={testing || saving}>
               {testing ? 'Testando...' : 'Testar conexão'}
             </button>
-            <button
-              className="int-btn-save"
-              onClick={handleSave}
-              disabled={saving || testing}
-            >
+            <button className="int-btn-save" onClick={handleSave} disabled={saving || testing}>
               {saving ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
@@ -230,20 +219,20 @@ function IntegrationCard({ def, integration, storeId, onSaved }: CardProps) {
   )
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
-
 export default function Integrations() {
   const [integrations, setIntegrations] = useState<Integration[]>([])
-  const [loading,      setLoading]      = useState(true)
+  const [loading, setLoading] = useState(true)
   const storeIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     async function init() {
       const { data: authData } = await supabase.auth.getUser()
       if (!authData.user) return
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) { setLoading(false); return }
+      const { data: userData } = await supabase.from('users').select('store_id').eq('auth_id', authData.user.id).single()
+      if (!userData) {
+        setLoading(false)
+        return
+      }
       storeIdRef.current = userData.store_id
       await fetchIntegrations(userData.store_id)
     }
@@ -253,11 +242,11 @@ export default function Integrations() {
   async function fetchIntegrations(storeId?: string) {
     const sid = storeId ?? storeIdRef.current
     if (!sid) return
-    const db = supabaseAdmin ?? supabase
-    const { data } = await db
+    const { data } = await supabase
       .from('store_integrations')
-      .select('*')
+      .select('id,store_id,platform,client_id,active,last_sync_at,last_error')
       .eq('store_id', sid)
+      .limit(20)
     setIntegrations((data ?? []) as Integration[])
     setLoading(false)
   }

@@ -1,5 +1,5 @@
 import type { Page } from '../../App'
-import type { UserRole } from '../../types'
+import type { UserPermissions, UserRole } from '../../types'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -8,9 +8,10 @@ interface SidebarProps {
   onLogout: () => void
   isOwner: boolean
   userRole: UserRole | null
+  permissions: UserPermissions
 }
 
-export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, userRole: _userRole }: SidebarProps) {
+export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, userRole: _userRole, permissions }: SidebarProps) {
   return (
     <div className="sidebar">
       <div className="sidebar-top">
@@ -18,7 +19,7 @@ export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, use
       </div>
 
       <nav className="sidebar-nav">
-        <button
+        {(isOwner || permissions.operational) && <button
           className={`sidebar-btn ${activePage === 'operational' ? 'active' : ''}`}
           onClick={() => onNavigate('operational')}
           title="Painel Operacional"
@@ -27,9 +28,9 @@ export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, use
             <circle cx="12" cy="12" r="10"/>
             <circle cx="12" cy="12" r="3"/>
           </svg>
-        </button>
+        </button>}
 
-        <button
+        {(isOwner || permissions.orders) && <button
           className={`sidebar-btn ${activePage === 'orders' ? 'active' : ''}`}
           onClick={() => onNavigate('orders')}
           title="Pedidos"
@@ -40,9 +41,9 @@ export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, use
             <line x1="9" y1="12" x2="15" y2="12"/>
             <line x1="9" y1="16" x2="13" y2="16"/>
           </svg>
-        </button>
+        </button>}
 
-        <button
+        {(isOwner || permissions.drivers) && <button
           className={`sidebar-btn ${activePage === 'drivers' ? 'active' : ''}`}
           onClick={() => onNavigate('drivers')}
           title="Motoristas"
@@ -51,7 +52,7 @@ export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, use
             <circle cx="12" cy="10" r="3"/>
             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
           </svg>
-        </button>
+        </button>}
 
         {isOwner && <button
           className={`sidebar-btn ${activePage === 'users' ? 'active' : ''}`}
@@ -78,18 +79,6 @@ export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, use
             <polyline points="8 6 2 12 8 18"/>
           </svg>
         </button>
-
-        {isOwner && <button
-          className={`sidebar-btn ${activePage === 'integrations' ? 'active' : ''}`}
-          onClick={() => onNavigate('integrations')}
-          title="Integrações"
-        >
-          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <rect x="2" y="7" width="6" height="10" rx="1"/>
-            <rect x="9" y="3" width="6" height="18" rx="1"/>
-            <rect x="16" y="10" width="6" height="7" rx="1"/>
-          </svg>
-        </button>}
 
         {isOwner && <button
           className={`sidebar-btn ${activePage === 'settings' ? 'active' : ''}`}

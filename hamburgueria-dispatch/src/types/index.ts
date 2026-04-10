@@ -41,15 +41,21 @@ export interface Store {
   created_at: string
 }
 
+export interface UserPermissions {
+  operational: boolean
+  orders: boolean
+  drivers: boolean
+}
+
 export interface User {
   id: string
   store_id: string
   auth_id: string
   name: string
   username: string
-  password?: string   // stored for owner visibility; synced to auth on change
   role: UserRole
   active: boolean
+  permissions?: UserPermissions
   created_at: string
   last_login_at?: string
 }

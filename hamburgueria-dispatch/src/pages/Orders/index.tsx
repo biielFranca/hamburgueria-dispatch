@@ -275,14 +275,40 @@ export default function Orders() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  const storeIdRef = useRef<string | null>(null)
 
-  async function fetchOrders() {
+  async function resolveStoreId(): Promise<string | null> {
+    if (storeIdRef.current) return storeIdRef.current
+    const { data: authData } = await supabase.auth.getUser()
+    if (!authData.user) return null
+    const { data: userData } = await supabase
+      .from('users')
+      .select('store_id')
+      .eq('auth_id', authData.user.id)
+      .single()
+    if (!userData?.store_id) return null
+    storeIdRef.current = userData.store_id
+    return userData.store_id
+  }
+
+  async function fetchOrders(storeId?: string) {
     setRefreshing(true)
+    const sid = storeId ?? (await resolveStoreId())
+    if (!sid) {
+      setOrders([])
+      setError('Não foi possível identificar a loja')
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
+
     const { data, error } = await supabase
       .from('orders')
-      .select('*')
+      .select('id,store_id,platform,platform_order_id,platform_order_code,customer_name,customer_phone,address_street,address_number,address_complement,address_neighborhood,address_city,address_zip,latitude,longitude,items,total_amount,payment_method,delivery_type,logistics_type,status,route_eligibility,route_block_reason,rejection_count,estimated_delivery_at,dispatched_at,created_at,updated_at')
+      .eq('store_id', sid)
       .not('status', 'in', '("delivered","cancelled")')
       .order('created_at', { ascending: false })
+      .limit(300)
 
     if (error) {
       setError('Erro ao carregar pedidos: ' + error.message)
@@ -295,17 +321,31 @@ export default function Orders() {
   }
 
   useEffect(() => {
-    fetchOrders()
+    let channel: ReturnType<typeof supabase.channel> | null = null
 
-    // Real-time subscription
-    const channel = supabase
-      .channel('orders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchOrders()
-      })
-      .subscribe()
+    async function init() {
+      const sid = await resolveStoreId()
+      if (!sid) {
+        setLoading(false)
+        return
+      }
 
-    return () => { supabase.removeChannel(channel) }
+      await fetchOrders(sid)
+
+      // Real-time subscription scoped by store
+      channel = supabase
+        .channel(`orders-changes-${sid}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `store_id=eq.${sid}` }, () => {
+          fetchOrders(sid)
+        })
+        .subscribe()
+    }
+
+    init()
+
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
   }, [])
 
   const ordersByPlatform = (platform: Platform) =>
@@ -321,7 +361,7 @@ export default function Orders() {
         <div className="orders-header-actions">
           <button
             className={`orders-refresh-btn ${refreshing ? 'spinning' : ''}`}
-            onClick={fetchOrders}
+            onClick={() => fetchOrders()}
             disabled={refreshing}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

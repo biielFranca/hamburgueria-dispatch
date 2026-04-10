@@ -19,36 +19,24 @@ export default function Login({ sessionExpired = false }: { sessionExpired?: boo
 
     try {
       const normalizedUser = username.trim().toLowerCase()
-
-      // busca o usuário pelo username para pegar o email usado no auth
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('username', normalizedUser)
-        .eq('active', true)
-        .single()
-
-      if (userError || !userData) {
-        setError('Usuário não encontrado ou inativo')
+      if (!/^[a-z0-9._-]{3,32}$/.test(normalizedUser)) {
+        setError('Formato de usuário inválido')
         setLoading(false)
         return
       }
 
-      // faz login no supabase auth com o email vinculado
       const { error: authError } = await supabase.auth.signInWithPassword({
         email: `${normalizedUser}@dispatch.internal`,
         password,
       })
 
       if (authError) {
-        setError('Usuário ou senha incorretos')
+        setError('Credenciais inválidas')
         setLoading(false)
         return
       }
 
-      // marca o momento do login para controle de expiração (8h)
       localStorage.setItem('dispatch_login_at', Date.now().toString())
-
     } catch {
       setError('Erro ao fazer login. Tente novamente.')
     }
@@ -68,7 +56,7 @@ export default function Login({ sessionExpired = false }: { sessionExpired?: boo
             <input
               type="text"
               value={username}
-              onChange={e => setUsername(e.target.value)}
+              onChange={e => setUsername(e.target.value.replace(/\s/g, ''))}
               placeholder="seu usuário"
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
             />
