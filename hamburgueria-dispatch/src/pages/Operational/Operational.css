@@ -59,7 +59,7 @@
 
 .op-stat-lbl {
   font-size: 10px;
-  color: #555;
+  color: #888;
   line-height: 1;
 }
 
@@ -170,7 +170,7 @@
   padding: 10px 12px;
   background: transparent;
   border: none;
-  color: #444;
+  color: #666;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -259,7 +259,7 @@
 
 .sug-version {
   font-size: 9px;
-  color: #444;
+  color: #666;
   background: #1a1a1a;
   border-radius: 3px;
   padding: 1px 4px;
@@ -276,12 +276,12 @@
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #666;
+  color: #888;
 }
 
 .sug-stops-badge {
   font-size: 10px;
-  color: #555;
+  color: #888;
   background: #1a1a1a;
   border-radius: 3px;
   padding: 1px 5px;
@@ -315,7 +315,7 @@
   justify-content: center;
   font-size: 9px;
   font-weight: 700;
-  color: #666;
+  color: #888;
   flex-shrink: 0;
 }
 
@@ -348,7 +348,7 @@
 
 .sug-stop-address {
   font-size: 10px;
-  color: #555;
+  color: #888;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -497,7 +497,7 @@
 
 .inprog-driver {
   font-size: 11px;
-  color: #555;
+  color: #888;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -505,7 +505,7 @@
 
 .inprog-stops {
   font-size: 10px;
-  color: #444;
+  color: #777;
   margin-top: 2px;
 }
 
@@ -535,7 +535,7 @@
 
 .inprog-label {
   font-size: 9px;
-  color: #444;
+  color: #777;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -550,7 +550,7 @@
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
-  color: #2a2a2a;
+  color: #555;
   font-size: 12px;
   gap: 8px;
 }
@@ -565,6 +565,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #333;
+  color: #666;
   font-size: 13px;
 }

@@ -51,7 +51,7 @@
 }
 
 .drivers-add-input::placeholder {
-  color: #333;
+  color: #555;
 }
 
 .btn-add-driver {
@@ -91,7 +91,7 @@
   border-radius: 5px;
   border: none;
   background: transparent;
-  color: #444;
+  color: #666;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -157,7 +157,7 @@
 
 .driver-row-date {
   font-size: 11px;
-  color: #444;
+  color: #777;
 }
 
 .driver-row-status {
@@ -219,7 +219,7 @@
   border-radius: 6px;
   border: 1px solid #252525;
   background: transparent;
-  color: #333;
+  color: #666;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -241,7 +241,7 @@
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
-  color: #333;
+  color: #555;
   font-size: 13px;
   gap: 8px;
 }
@@ -297,7 +297,7 @@
 
 .confirm-text {
   font-size: 13px;
-  color: #666;
+  color: #888;
   margin-bottom: 20px;
   line-height: 1.5;
 }
@@ -313,10 +313,16 @@
   background: #1a1a1a;
   border: 1px solid #2a2a2a;
   border-radius: 6px;
-  color: #666;
+  color: #888;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-confirm-cancel:hover {
+  background: #222;
+  color: #ccc;
 }
 
 .btn-confirm-delete {
@@ -341,6 +347,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #444;
+  color: #666;
   font-size: 13px;
 }

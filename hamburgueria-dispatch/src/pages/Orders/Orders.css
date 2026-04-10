@@ -131,7 +131,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #333;
+  color: #555;
   font-size: 12px;
   padding: 20px 0;
 }
@@ -193,7 +193,7 @@
 
 .card-address {
   font-size: 11px;
-  color: #666;
+  color: #888;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -216,7 +216,7 @@
 
 .card-time {
   font-size: 10px;
-  color: #444;
+  color: #777;
 }
 
 /* ── Status styles ──────────────────────────────────── */
@@ -356,7 +356,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: #444;
+  color: #777;
   padding-bottom: 4px;
   border-bottom: 1px solid #1e1e1e;
 }
@@ -369,7 +369,7 @@
 
 .modal-row-label {
   font-size: 11px;
-  color: #555;
+  color: #888;
   flex-shrink: 0;
   width: 80px;
 }
@@ -407,7 +407,7 @@
 
 .modal-item-qty {
   font-size: 11px;
-  color: #666;
+  color: #888;
   flex-shrink: 0;
 }
 
@@ -421,7 +421,7 @@
 
 .modal-item-notes {
   font-size: 10px;
-  color: #555;
+  color: #888;
   margin-top: 2px;
 }
 
@@ -462,7 +462,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #444;
+  color: #666;
   font-size: 13px;
 }
 

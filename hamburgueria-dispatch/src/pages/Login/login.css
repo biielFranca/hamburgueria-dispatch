@@ -30,7 +30,7 @@
 
 .login-subtitle {
   font-size: 13px;
-  color: #666;
+  color: #888;
   margin: 0 0 24px 0;
 }
 
@@ -49,7 +49,7 @@
 
 .login-field label {
   font-size: 13px;
-  color: #aaa;
+  color: #bbb;
   font-weight: 500;
 }
 
@@ -69,7 +69,7 @@
 }
 
 .login-field input::placeholder {
-  color: #444;
+  color: #555;
 }
 
 .login-error {

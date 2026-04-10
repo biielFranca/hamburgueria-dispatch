@@ -91,6 +91,12 @@ button {
   outline: none;
 }
 
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
 #greet-input {
   margin-right: 5px;
 }

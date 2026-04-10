@@ -4,7 +4,7 @@
   align-items: center;
   justify-content: center;
   height: 100vh;
-  color: #666;
+  color: #888;
   font-size: 14px;
 }
 
@@ -13,7 +13,7 @@
   align-items: center;
   justify-content: center;
   padding: 60px 0;
-  color: #444;
+  color: #666;
   font-size: 13px;
 }
 
@@ -24,7 +24,6 @@
   padding: 28px 32px 32px;
   background: #0f0f0f;
   color: #eee;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .settings-header {
@@ -51,7 +50,7 @@
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: #555;
+  color: #888;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -96,7 +95,7 @@
 .settings-field label {
   font-size: 12px;
   font-weight: 600;
-  color: #aaa;
+  color: #bbb;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -117,7 +116,7 @@
 }
 
 .settings-field input::placeholder {
-  color: #444;
+  color: #555;
 }
 
 .settings-coords {
@@ -128,7 +127,7 @@
 
 .settings-map-hint {
   font-size: 11px;
-  color: #555;
+  color: #888;
   margin: -4px 0 0;
 }
 
@@ -187,7 +186,7 @@
 
 .settings-cep-hint {
   font-size: 11px;
-  color: #666;
+  color: #888;
   margin-top: 3px;
   display: block;
 }
@@ -206,7 +205,7 @@
 
 .settings-connections-desc {
   font-size: 12px;
-  color: #555;
+  color: #888;
   margin: 0 0 16px;
 }
 
@@ -238,7 +237,7 @@
 
 .plan-expiry {
   font-size: 12px;
-  color: #666;
+  color: #888;
 }
 
 .plan-badge {
@@ -265,7 +264,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #555;
+  color: #888;
   margin-bottom: 12px;
 }
 
@@ -368,12 +367,12 @@
 
 .int-badge-soon {
   background: rgba(100, 116, 139, 0.08);
-  color: #3a3a3a;
+  color: #666;
 }
 
 .int-description {
   font-size: 12px;
-  color: #444;
+  color: #777;
   padding: 0 16px 14px;
   margin: 0;
   margin-top: -6px;
@@ -381,7 +380,7 @@
 
 .int-last-sync {
   font-size: 11px;
-  color: #333;
+  color: #666;
 }
 
 .int-error-dot {
@@ -393,7 +392,7 @@
 }
 
 .int-chevron {
-  color: #333;
+  color: #666;
   transition: transform 0.2s;
 }
 
@@ -418,7 +417,7 @@
 .int-field label {
   font-size: 11px;
   font-weight: 600;
-  color: #555;
+  color: #888;
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -432,7 +431,7 @@
 .int-field-row label {
   font-size: 12px;
   font-weight: 600;
-  color: #666;
+  color: #888;
 }
 
 .int-input {
@@ -448,7 +447,7 @@
 }
 
 .int-input:focus { border-color: #3a3a3a; color: #fff; }
-.int-input::placeholder { color: #2a2a2a; }
+.int-input::placeholder { color: #555; }
 
 .int-toggle {
   display: flex;
@@ -493,7 +492,7 @@
 .int-toggle-label {
   font-size: 12px;
   font-weight: 600;
-  color: #555;
+  color: #888;
 }
 
 .int-toggle.on .int-toggle-label { color: #4ade80; }
@@ -509,7 +508,7 @@
   background: #141414;
   border: 1px solid #252525;
   border-radius: 6px;
-  color: #666;
+  color: #888;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
