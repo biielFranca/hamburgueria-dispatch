@@ -105,8 +105,10 @@ export default function Dev() {
   const [pickupBtn, setPickupBtn] = useState<BtnStatus>(IDLE)
   const [ifoodBtn, setIfoodBtn] = useState<BtnStatus>(IDLE)
   const [clearBtn, setClearBtn] = useState<BtnStatus>(IDLE)
+  const [clearSuggBtn, setClearSuggBtn] = useState<BtnStatus>(IDLE)
   const [alarmBtn, setAlarmBtn] = useState<BtnStatus>(IDLE)
   const [testCount, setTestCount] = useState<number | null>(null)
+  const [suggCount, setSuggCount] = useState<number | null>(null)
 
   // Monitor
   const [log, setLog] = useState<LogEntry[]>([])
@@ -144,6 +146,7 @@ export default function Dev() {
         storeIdRef.current = userData.store_id
         setStoreId(userData.store_id)
         refreshCount(userData.store_id)
+        refreshSuggCount(userData.store_id)
         refreshStats(userData.store_id)
       }
     }
@@ -203,6 +206,7 @@ export default function Dev() {
           const eta = s.predicted_eta != null ? `${s.predicted_eta}min` : 'sem ETA'
           addLog('ok', `[route-engine] Sugestão criada: ${n} pedido(s), ${eta}`)
           refreshStats(storeId)
+          refreshSuggCount(storeId)
         },
       )
       .on(
@@ -219,6 +223,7 @@ export default function Dev() {
               : 'info'
             addLog(level, `[route-engine] Sugestão ${s.id.slice(0, 8)}: ${prev.status ?? '?'} → ${s.status}`)
             refreshStats(storeId)
+            refreshSuggCount(storeId)
           }
         },
       )
@@ -242,6 +247,17 @@ export default function Dev() {
       .eq('store_id', id)
       .ilike('platform_order_id', 'test-%')
     setTestCount(count ?? 0)
+  }
+
+  async function refreshSuggCount(sid?: string) {
+    const id = sid ?? storeIdRef.current
+    if (!id) return
+    const { count } = await supabase
+      .from('dispatch_suggestions')
+      .select('id', { count: 'exact', head: true })
+      .eq('store_id', id)
+      .eq('status', 'pending_review')
+    setSuggCount(count ?? 0)
   }
 
   async function insertOrder(type: 'own' | 'platform' | 'pickup', set: (s: BtnStatus) => void) {
@@ -320,8 +336,53 @@ export default function Dev() {
     } else {
       setClearBtn({ state: 'ok', msg: `${count ?? 0} pedido(s) removido(s)` })
       setTestCount(0)
+      refreshSuggCount()
     }
     setTimeout(() => setClearBtn(IDLE), 3000)
+  }
+
+  async function handleClearSuggestions() {
+    if (!storeIdRef.current) return
+    setClearSuggBtn({ state: 'loading', msg: '' })
+
+    // Fetch pending suggestions to know which orders to re-queue
+    const { data: suggs, error: fetchErr } = await supabase
+      .from('dispatch_suggestions')
+      .select('id, suggested_sequence')
+      .eq('store_id', storeIdRef.current)
+      .eq('status', 'pending_review')
+
+    if (fetchErr) {
+      setClearSuggBtn({ state: 'error', msg: fetchErr.message })
+      setTimeout(() => setClearSuggBtn(IDLE), 3000)
+      return
+    }
+
+    const allOrderIds = (suggs ?? []).flatMap(s => s.suggested_sequence as string[])
+
+    // Reset in_suggestion orders back to awaiting_route
+    if (allOrderIds.length > 0) {
+      await supabase
+        .from('orders')
+        .update({ status: 'awaiting_route' })
+        .in('id', allOrderIds)
+        .eq('status', 'in_suggestion')
+    }
+
+    // Delete suggestions
+    const { error: delErr, count } = await supabase
+      .from('dispatch_suggestions')
+      .delete({ count: 'exact' })
+      .eq('store_id', storeIdRef.current)
+      .eq('status', 'pending_review')
+
+    if (delErr) {
+      setClearSuggBtn({ state: 'error', msg: delErr.message })
+    } else {
+      setClearSuggBtn({ state: 'ok', msg: `${count ?? 0} sugestão(ões) removida(s)` })
+      setSuggCount(0)
+    }
+    setTimeout(() => setClearSuggBtn(IDLE), 3000)
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -450,7 +511,7 @@ export default function Dev() {
           </button>
           <button
             className="dev-monitor-btn dev-monitor-btn-secondary"
-            onClick={() => { refreshStats(); refreshCount() }}
+            onClick={() => { refreshStats(); refreshCount(); refreshSuggCount() }}
           >
             Atualizar stats
           </button>
@@ -483,11 +544,15 @@ export default function Dev() {
 
       <section className="dev-section">
         <div className="dev-section-title">
-          Limpar pedidos de teste
-          {testCount !== null && <span className="dev-count">{testCount} no banco</span>}
+          Limpar dados de teste
+          {testCount !== null && <span className="dev-count">{testCount} pedido(s)</span>}
+          {suggCount !== null && suggCount > 0 && (
+            <span className="dev-count" style={{ marginLeft: 4 }}>{suggCount} sugestão(ões)</span>
+          )}
         </div>
         <div className="dev-section-desc">
-          Remove todos os pedidos com <code>platform_order_id LIKE 'test-%'</code> da sua loja.
+          Remove pedidos de teste e/ou esvazia a fila de sugestões pendentes.
+          Pedidos em sugestão voltam para <code>awaiting_route</code>.
         </div>
         <div className="dev-btn-row">
           <DevButton
@@ -497,6 +562,14 @@ export default function Dev() {
             status={clearBtn}
             onClick={handleClear}
             disabled={testCount === 0}
+          />
+          <DevButton
+            label="Limpar fila de sugestões"
+            desc={suggCount ? `${suggCount} sugestão(ões) pendente(s)` : 'nenhuma sugestão pendente'}
+            color="#f97316"
+            status={clearSuggBtn}
+            onClick={handleClearSuggestions}
+            disabled={suggCount === 0}
           />
         </div>
       </section>
