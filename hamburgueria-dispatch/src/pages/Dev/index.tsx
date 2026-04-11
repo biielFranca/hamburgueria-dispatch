@@ -27,7 +27,7 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
-function mockOrder(storeId: string, type: 'own' | 'platform' | 'pickup') {
+function mockOrder(storeId: string, type: 'own' | 'platform' | 'pickup', prepMinutes = 20) {
   const isTakeout = type === 'pickup'
   const isOwn = type === 'own'
   const items = pick(ITEM_SETS)
@@ -52,6 +52,10 @@ function mockOrder(storeId: string, type: 'own' | 'platform' | 'pickup') {
     payment_method: pick(PAYMENTS),
     delivery_type: isTakeout ? 'pickup' : 'delivery',
     logistics_type: isOwn ? 'own' : 'platform',
+    // estimated_delivery_at: now + prepMinutes (always ≤ 25 min → classifier rule 5 never blocks)
+    estimated_delivery_at: isTakeout
+      ? null
+      : new Date(Date.now() + prepMinutes * 60_000).toISOString(),
     // All orders start as 'normalized' so the classifier does a meaningful UPDATE
     // to 'awaiting_route', which triggers the route engine via Realtime.
     status: 'normalized',
@@ -100,6 +104,8 @@ function LogMsg({ msg }: { msg: string }) {
 export default function Dev() {
   const storeIdRef = useRef<string | null>(null)
   const [storeId, setStoreId] = useState<string | null>(null)
+
+  const [prepMin, setPrepMin] = useState(20)
 
   const [ownBtn, setOwnBtn] = useState<BtnStatus>(IDLE)
   const [platformBtn, setPlatformBtn] = useState<BtnStatus>(IDLE)
@@ -267,7 +273,7 @@ export default function Dev() {
       return
     }
     set({ state: 'loading', msg: '' })
-    const payload = mockOrder(storeIdRef.current, type)
+    const payload = mockOrder(storeIdRef.current, type, prepMin)
     const { error } = await supabase.from('orders').insert(payload)
     if (error) {
       set({ state: 'error', msg: error.message })
@@ -419,6 +425,30 @@ export default function Dev() {
           <span style={{ color: '#555' }}>
             platform_order_id começa com <code>test-</code> para fácil remoção.
           </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <label style={{ fontSize: 12, color: '#888' }}>Tempo de preparo:</label>
+          {[10, 15, 20, 25].map(min => (
+            <button
+              key={min}
+              onClick={() => setPrepMin(min)}
+              style={{
+                padding: '4px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+                borderRadius: 5,
+                border: '1px solid',
+                cursor: 'pointer',
+                background: prepMin === min ? '#facc1522' : 'transparent',
+                borderColor: prepMin === min ? '#facc15' : '#2a2a2a',
+                color: prepMin === min ? '#facc15' : '#666',
+                transition: 'all 0.15s',
+              }}
+            >
+              {min} min
+            </button>
+          ))}
         </div>
 
         <div className="dev-btn-row">
