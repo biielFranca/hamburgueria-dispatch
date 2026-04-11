@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { confirmIfoodDispatch } from '../../lib/integrations/ifood'
 import { confirmOpenDeliveryDispatch } from '../../lib/integrations/openDelivery'
+import { fetchRouteGeometry } from '../../lib/routeEngine'
 import type { Driver, Order, Platform, Store } from '../../types'
 import OperationalMap, { DISPATCH_GHOST_MS } from './OperationalMap'
 import type { OrderMarkerState } from './OperationalMap'
@@ -485,7 +486,7 @@ export default function Operational() {
     [suggestions],
   )
 
-  // Route polyline: store → each stop with coordinates
+  // Route polyline: straight-line coords (used as fallback while OSRM loads)
   const routeCoords = useMemo<[number, number][]>(() => {
     if (!selectedSuggestion) return []
     const coords: [number, number][] = []
@@ -501,6 +502,18 @@ export default function Operational() {
     }
     return coords
   }, [selectedSuggestion, selectedSequence, store, orders])
+
+  // Real road geometry fetched from OSRM (replaces straight lines once loaded)
+  const [geoRouteCoords, setGeoRouteCoords] = useState<[number, number][]>([])
+
+  useEffect(() => {
+    setGeoRouteCoords([])           // clear previous geometry immediately
+    if (routeCoords.length < 2) return
+
+    fetchRouteGeometry(routeCoords)
+      .then(setGeoRouteCoords)
+      .catch(() => {})              // keep empty → falls back to routeCoords in map
+  }, [selectedSuggId])             // eslint-disable-line
 
   // Marker states (recomputed every tick for live dispatched→ghost transition)
   const markerStates = useMemo<Map<string, OrderMarkerState>>(() => {
@@ -616,7 +629,7 @@ export default function Operational() {
             store={store}
             orders={orders}
             markerStates={markerStates}
-            routeCoords={routeCoords}
+            routeCoords={geoRouteCoords.length >= 2 ? geoRouteCoords : routeCoords}
             onOrderCtrlClick={(id) => setPopupOrderId(prev => prev === id ? null : id)}
           />
 

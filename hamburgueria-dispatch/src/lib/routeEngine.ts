@@ -50,6 +50,27 @@ async function getRouteDuration(
   }
 }
 
+/**
+ * Fetch real road geometry from OSRM for display on the map.
+ * Returns [lat, lng] pairs (Leaflet format).
+ * Throws on network/API error — caller should fall back to straight lines.
+ */
+export async function fetchRouteGeometry(
+  coords: [number, number][],  // [lat, lng] pairs
+): Promise<[number, number][]> {
+  const coordStr = coords.map(([lat, lng]) => `${lng},${lat}`).join(';')
+  const url = `${OSRM_BASE}/route/v1/${OSRM_PROFILE}/${coordStr}?overview=full&geometries=geojson`
+
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`OSRM geometry error ${res.status}`)
+  const json = await res.json()
+  if (!json.routes?.length) throw new Error('No route found')
+
+  // OSRM returns [lng, lat] — convert to [lat, lng] for Leaflet
+  return (json.routes[0].geometry.coordinates as [number, number][])
+    .map(([lng, lat]) => [lat, lng] as [number, number])
+}
+
 // ── Fetch eligible orders ─────────────────────────────────────────────────────
 
 async function fetchEligibleOrders(storeId: string): Promise<Order[]> {
@@ -131,41 +152,39 @@ async function handleTimeouts(orders: Order[], storeId: string) {
 
 // ── Proximity pair selection ──────────────────────────────────────────────────
 //
-// Sempre inclui o pedido de maior prioridade (anchor = maior rejection_count,
-// mais antigo). Entre os demais, escolhe o companheiro que minimiza a rota
-// estimada via Haversine: min(d(loja,A), d(loja,B)) + d(A,B).
-// OSRM é chamado apenas uma vez para definir a melhor sequência do par.
+// Avalia TODOS os pares possíveis e escolhe o que minimiza a rota estimada:
+//   score = min(d(loja,A), d(loja,B)) + d(A,B)
+//
+// Motivo: forçar o pedido de maior prioridade como âncora gera sugestões
+// absurdas quando ele está geograficamente isolado. Pedidos isolados de alta
+// prioridade são tratados pelo timer solo (10 min) e pelo handleTimeouts
+// (dispatch_timeout após 3 recusas), sem prejudicar a qualidade das rotas.
 
 function selectBestPair(
   orders: Order[],
   storeCoord: [number, number],
 ): [Order, Order] {
-  const anchor = orders[0]  // highest priority (sorted by rejection DESC, created_at ASC)
-  const anchorLat = anchor.latitude!
-  const anchorLon = anchor.longitude!
-  const dAnchorStore = haversineKm(storeCoord[0], storeCoord[1], anchorLat, anchorLon)
-
-  let bestCompanion = orders[1]
   let bestScore = Infinity
+  let bestI = 0
+  let bestJ = 1
 
-  for (let i = 1; i < orders.length; i++) {
-    const candidate = orders[i]
-    const candLat = candidate.latitude!
-    const candLon = candidate.longitude!
-
-    const dCandStore = haversineKm(storeCoord[0], storeCoord[1], candLat, candLon)
-    const dPair      = haversineKm(anchorLat, anchorLon, candLat, candLon)
-
-    // Estimated best route for this pair = closer stop first + distance between stops
-    const score = Math.min(dAnchorStore, dCandStore) + dPair
-
-    if (score < bestScore) {
-      bestScore = score
-      bestCompanion = candidate
+  for (let i = 0; i < orders.length - 1; i++) {
+    for (let j = i + 1; j < orders.length; j++) {
+      const a = orders[i]
+      const b = orders[j]
+      const dAStore = haversineKm(storeCoord[0], storeCoord[1], a.latitude!, a.longitude!)
+      const dBStore = haversineKm(storeCoord[0], storeCoord[1], b.latitude!, b.longitude!)
+      const dAB    = haversineKm(a.latitude!, a.longitude!, b.latitude!, b.longitude!)
+      const score  = Math.min(dAStore, dBStore) + dAB
+      if (score < bestScore) {
+        bestScore = score
+        bestI = i
+        bestJ = j
+      }
     }
   }
 
-  return [anchor, bestCompanion]
+  return [orders[bestI], orders[bestJ]]
 }
 
 // ── Result type ───────────────────────────────────────────────────────────────
