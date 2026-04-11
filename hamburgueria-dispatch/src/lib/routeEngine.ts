@@ -168,13 +168,28 @@ function selectBestPair(
   return [anchor, bestCompanion]
 }
 
+// ── Result type ───────────────────────────────────────────────────────────────
+
+export type RouteEngineOutcome =
+  | 'suggestion_created'
+  | 'concurrent_skip'
+  | 'no_store_coords'
+  | 'no_eligible_orders'
+  | 'all_timed_out'
+  | 'no_coords_on_orders'
+  | 'solo_waiting'
+
+export interface RouteEngineResult {
+  outcome: RouteEngineOutcome
+  detail?: string
+}
+
 // ── Main engine ───────────────────────────────────────────────────────────────
 
-export async function runRouteEngine(storeId: string): Promise<void> {
+export async function runRouteEngine(storeId: string): Promise<RouteEngineResult> {
   // Mutex: skip if already running to prevent duplicate suggestions
   if (engineRunning) {
-    console.debug('[RouteEngine] Já em execução — chamada concorrente ignorada.')
-    return
+    return { outcome: 'concurrent_skip' }
   }
   engineRunning = true
 
@@ -184,30 +199,27 @@ export async function runRouteEngine(storeId: string): Promise<void> {
       .from('stores').select('*').eq('id', storeId).single()
     const store = storeData as Store | null
     if (!store?.latitude || !store?.longitude) {
-      console.warn('[RouteEngine] Loja sem coordenadas configuradas — engine pausado. Configure lat/lng em Configurações.')
-      return
+      return { outcome: 'no_store_coords' }
     }
 
     const storeCoord: [number, number] = [store.latitude, store.longitude]
 
     const eligible = await fetchEligibleOrders(storeId)
     if (eligible.length === 0) {
-      console.debug('[RouteEngine] Nenhum pedido elegível no momento.')
-      return
+      return { outcome: 'no_eligible_orders' }
     }
-
-    console.debug(`[RouteEngine] ${eligible.length} pedido(s) elegível(is) encontrado(s).`)
 
     // Handle max-rejection timeouts first
     await handleTimeouts(eligible, storeId)
     const active = eligible.filter(o => (o.rejection_count ?? 0) < MAX_REJECTIONS)
-    if (active.length === 0) return
+    if (active.length === 0) {
+      return { outcome: 'all_timed_out' }
+    }
 
     // Filter orders with valid coordinates
     const withCoords = active.filter(o => o.latitude != null && o.longitude != null)
     if (withCoords.length === 0) {
-      console.warn('[RouteEngine] Pedidos elegíveis sem coordenadas — impossível calcular rota.')
-      return
+      return { outcome: 'no_coords_on_orders', detail: `${active.length} pedido(s) sem lat/lng` }
     }
 
     // ── Pair selection (proximity-based) ──────────────────────────────────────
@@ -216,11 +228,6 @@ export async function runRouteEngine(storeId: string): Promise<void> {
       const [anchor, companion] = selectBestPair(withCoords, storeCoord)
       const coordAnchor: [number, number] = [anchor.latitude!, anchor.longitude!]
       const coordComp:   [number, number] = [companion.latitude!, companion.longitude!]
-
-      console.debug(
-        `[RouteEngine] Par selecionado: ${anchor.platform_order_code ?? anchor.id.slice(0, 8)}` +
-        ` + ${companion.platform_order_code ?? companion.id.slice(0, 8)}`
-      )
 
       let bestSequence: Order[]
       let bestDuration: number
@@ -247,7 +254,8 @@ export async function runRouteEngine(storeId: string): Promise<void> {
       }
 
       await createSuggestion(storeId, bestSequence, bestDuration || null)
-      return
+      const codes = bestSequence.map(o => o.platform_order_code ?? o.id.slice(0, 8)).join(' + ')
+      return { outcome: 'suggestion_created', detail: codes }
     }
 
     // ── Single order: wait before solo dispatch ───────────────────────────────
@@ -258,19 +266,24 @@ export async function runRouteEngine(storeId: string): Promise<void> {
     const remainingMin = Math.ceil((SINGLE_ORDER_WAIT_MS - waitedMs) / 60_000)
 
     if (waitedMs < SINGLE_ORDER_WAIT_MS) {
-      console.debug(`[RouteEngine] 1 pedido solo aguardando — ${waitedMin}min passados, faltam ~${remainingMin}min.`)
-      return
+      return {
+        outcome: 'solo_waiting',
+        detail: `${waitedMin}min passados, faltam ~${remainingMin}min`,
+      }
     }
 
-    console.debug('[RouteEngine] Pedido solo atingiu tempo de espera — despachando.')
     let duration: number | null = null
     try {
-      const result = await getRouteDuration([storeCoord, [solo.latitude!, solo.longitude!]])
-      duration = result.duration
+      const r = await getRouteDuration([storeCoord, [solo.latitude!, solo.longitude!]])
+      duration = r.duration
     } catch {
       duration = null
     }
     await createSuggestion(storeId, [solo], duration)
+    return {
+      outcome: 'suggestion_created',
+      detail: `${solo.platform_order_code ?? solo.id.slice(0, 8)} (solo)`,
+    }
 
   } finally {
     engineRunning = false

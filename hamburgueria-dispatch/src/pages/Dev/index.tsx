@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { syncIfood } from '../../lib/ifood'
 import { playAlert } from '../../lib/alertSound'
 import { runRouteEngine } from '../../lib/routeEngine'
+import type { RouteEngineResult } from '../../lib/routeEngine'
 import type { Order } from '../../types'
 import './Dev.css'
 
@@ -283,18 +284,34 @@ export default function Dev() {
     setTimeout(() => set(IDLE), 4000)
   }
 
+  function logEngineResult(result: RouteEngineResult) {
+    const d = result.detail ? ` — ${result.detail}` : ''
+    const outcomes: Record<RouteEngineResult['outcome'], [LogLevel, string]> = {
+      suggestion_created:  ['ok',   `[route-engine] Sugestão criada${d}`],
+      concurrent_skip:     ['warn', '[route-engine] Engine já em execução — chamada ignorada'],
+      no_store_coords:     ['warn', '[route-engine] Loja sem coordenadas — configure lat/lng em Configurações'],
+      no_eligible_orders:  ['info', '[route-engine] Nenhum pedido elegível no momento'],
+      all_timed_out:       ['warn', '[route-engine] Todos os pedidos atingiram o limite de recusas'],
+      no_coords_on_orders: ['warn', `[route-engine] Pedidos sem coordenadas (geocodificação pendente)${d}`],
+      solo_waiting:        ['info', `[route-engine] 1 pedido solo aguardando${d}`],
+    }
+    const [level, msg] = outcomes[result.outcome] ?? ['info', `[route-engine] ${result.outcome}${d}`]
+    addLog(level, msg)
+  }
+
   async function handleForceEngine() {
     if (!storeIdRef.current) return
     setEngineRunning(true)
     addLog('info', '[route-engine] Execução manual iniciada...')
     try {
-      await runRouteEngine(storeIdRef.current)
-      addLog('ok', '[route-engine] Execução concluída')
+      const result = await runRouteEngine(storeIdRef.current)
+      logEngineResult(result)
     } catch (e) {
       addLog('error', `[route-engine] Erro: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setEngineRunning(false)
       refreshStats()
+      refreshSuggCount()
     }
   }
 
