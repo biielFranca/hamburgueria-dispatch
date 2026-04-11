@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { confirmIfoodDispatch } from '../../lib/integrations/ifood'
+import { confirmOpenDeliveryDispatch } from '../../lib/integrations/openDelivery'
 import type { Driver, Order, Platform, Store } from '../../types'
 import OperationalMap, { DISPATCH_GHOST_MS } from './OperationalMap'
 import type { OrderMarkerState } from './OperationalMap'
@@ -420,6 +422,20 @@ export default function Operational() {
         dispatched_at: now,
       }).in('id', orderIds),
     ])
+
+    // Notify platforms — best-effort, never block the UI on failure
+    for (const order of suggestion.orders) {
+      if (order.platform === 'ifood') {
+        confirmIfoodDispatch(order.platform_order_id).catch(e =>
+          console.warn('[Dispatch] iFood confirm failed:', e),
+        )
+      } else if (order.platform === '99food' || order.platform === 'cardapio_web') {
+        confirmOpenDeliveryDispatch(order.platform, order.platform_order_id).catch(e =>
+          console.warn(`[Dispatch] ${order.platform} confirm failed:`, e),
+        )
+        // keeta: always platform-managed logistics, never reaches dispatch queue
+      }
+    }
 
     // Add to in-progress tab
     setInProgress(prev => [...prev, {
