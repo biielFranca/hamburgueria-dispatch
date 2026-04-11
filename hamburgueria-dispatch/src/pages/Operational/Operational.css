@@ -69,6 +69,7 @@
 .op-body {
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -151,14 +152,13 @@
 .op-panel-right {
   width: 380px;
   flex-shrink: 0;
+  /* height: 100% ties this to the flex row's cross-axis size so that
+     the grid's 1fr row has a concrete reference height to divide. */
+  height: 100%;
   border-left: 1px solid #1a1a1a;
   background: #0d0d0d;
-  /* Grid: tabs row (auto-height) + content row (fills the rest).
-     Grid 1fr rows handle overflow correctly in all browsers;
-     flexbox min-height:0 chains are unreliable in nested layouts. */
   display: grid;
   grid-template-rows: auto 1fr;
-  min-height: 0;
   overflow: hidden;
 }
 
