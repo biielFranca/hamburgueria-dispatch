@@ -38,6 +38,17 @@ interface InProgressEntry {
   stopCount: number
 }
 
+interface FinalizedEntry {
+  id: string
+  code: string
+  customerName: string
+  driverName: string | null
+  status: string
+  totalAmount: number
+  platform: Platform
+  dispatchedAt: string | null
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatCurrency(v: number) {
@@ -228,7 +239,8 @@ export default function Operational() {
   const [suggestions, setSuggestions]     = useState<SuggestionRow[]>([])
   const [drivers, setDrivers]             = useState<Driver[]>([])
   const [selectedSuggId, setSelectedSuggId] = useState<string | null>(null)
-  const [activeTab, setActiveTab]         = useState<'suggestions' | 'inprogress'>('suggestions')
+  const [activeTab, setActiveTab]         = useState<'suggestions' | 'inprogress' | 'finalized'>('suggestions')
+  const [finalized, setFinalized]         = useState<FinalizedEntry[]>([])
   const [driverSelections, setDriverSelections] = useState<Record<string, string>>({})
   const [inProgress, setInProgress]       = useState<InProgressEntry[]>([])
   const [loadingAction, setLoadingAction] = useState<string | null>(null) // suggestionId being acted upon
@@ -266,7 +278,9 @@ export default function Operational() {
 
     const sid = storeIdRef.current!
 
-    const [storeRes, driversRes, ordersRes, suggestionsRes] = await Promise.all([
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+    const [storeRes, driversRes, ordersRes, suggestionsRes, finalizedRes] = await Promise.all([
       supabase.from('stores').select('*').eq('id', sid).single(),
       supabase.from('drivers').select('*').eq('store_id', sid).eq('active', true).order('name'),
       supabase.from('orders').select('*')
@@ -278,6 +292,12 @@ export default function Operational() {
         .eq('store_id', sid)
         .eq('status', 'pending_review')
         .order('created_at', { ascending: false }),
+      supabase.from('orders').select('*')
+        .eq('store_id', sid)
+        .in('status', ['dispatched', 'delivered', 'cancelled'])
+        .gte('updated_at', since24h)
+        .order('updated_at', { ascending: false })
+        .limit(100),
     ])
 
     const fetchedOrders  = (ordersRes.data ?? []) as Order[]
@@ -298,10 +318,62 @@ export default function Operational() {
         .filter(Boolean) as Order[],
     }))
 
+    // ── Finalized orders: join driver names ─────────────────────────────────
+    const finalizedOrders = (finalizedRes.data ?? []) as Order[]
+    const driverByOrderId: Record<string, string> = {}
+
+    if (finalizedOrders.length > 0) {
+      const finalizedIds = finalizedOrders.map(o => o.id)
+
+      const { data: suggLinks } = await supabase
+        .from('dispatch_suggestion_orders')
+        .select('order_id, suggestion_id')
+        .in('order_id', finalizedIds)
+
+      if (suggLinks?.length) {
+        const suggIds = [...new Set(suggLinks.map(l => l.suggestion_id as string))]
+
+        const { data: dispatched } = await supabase
+          .from('dispatch_suggestions')
+          .select('id, assigned_driver_id')
+          .in('id', suggIds)
+          .not('assigned_driver_id', 'is', null)
+
+        const allDriverIds = [...new Set((dispatched ?? []).map(s => s.assigned_driver_id as string))]
+        const driverNameMap = new Map<string, string>()
+
+        if (allDriverIds.length > 0) {
+          const { data: driverRows } = await supabase
+            .from('drivers').select('id, name').in('id', allDriverIds)
+          for (const d of (driverRows ?? [])) driverNameMap.set(d.id, d.name)
+        }
+
+        const suggToDriver = new Map((dispatched ?? []).map(s => [s.id, s.assigned_driver_id as string]))
+        for (const link of suggLinks) {
+          const driverId = suggToDriver.get(link.suggestion_id)
+          if (driverId && driverNameMap.has(driverId)) {
+            driverByOrderId[link.order_id] = driverNameMap.get(driverId)!
+          }
+        }
+      }
+    }
+
+    const finalizedEntries: FinalizedEntry[] = finalizedOrders.map(o => ({
+      id:          o.id,
+      code:        o.platform_order_code ?? `#${o.id.slice(0, 6).toUpperCase()}`,
+      customerName: o.customer_name,
+      driverName:  driverByOrderId[o.id] ?? null,
+      status:      o.status,
+      totalAmount: o.total_amount,
+      platform:    o.platform,
+      dispatchedAt: o.dispatched_at ?? null,
+    }))
+
     setStore((storeRes.data ?? null) as Store | null)
     setDrivers((driversRes.data ?? []) as Driver[])
     setOrders(fetchedOrders)
     setSuggestions(enriched)
+    setFinalized(finalizedEntries)
     setLoading(false)
   }
 
@@ -586,6 +658,13 @@ export default function Operational() {
               Em andamento
               <span className="panel-tab-badge">{inProgress.length}</span>
             </button>
+            <button
+              className={`panel-tab ${activeTab === 'finalized' ? 'active' : ''}`}
+              onClick={() => setActiveTab('finalized')}
+            >
+              Finalizados
+              <span className="panel-tab-badge">{finalized.length}</span>
+            </button>
           </div>
 
           {/* Content */}
@@ -617,7 +696,7 @@ export default function Operational() {
                   />
                 ))
               )
-            ) : (
+            ) : activeTab === 'inprogress' ? (
               inProgress.length === 0 ? (
                 <div className="panel-empty">
                   <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -630,10 +709,57 @@ export default function Operational() {
                   <InProgressBlock key={entry.suggestionId} entry={entry} />
                 ))
               )
+            ) : (
+              finalized.length === 0 ? (
+                <div className="panel-empty">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <polyline points="9 11 12 14 22 4"/>
+                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                  </svg>
+                  Nenhum pedido finalizado hoje
+                </div>
+              ) : (
+                finalized.map(entry => (
+                  <FinalizedBlock key={entry.id} entry={entry} />
+                ))
+              )
             )}
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── FinalizedBlock ────────────────────────────────────────────────────────────
+
+const FINALIZED_STATUS_LABEL: Record<string, { label: string; color: string }> = {
+  dispatched: { label: 'Despachado', color: '#60a5fa' },
+  delivered:  { label: 'Entregue',   color: '#4ade80' },
+  cancelled:  { label: 'Cancelado',  color: '#f87171' },
+}
+
+function FinalizedBlock({ entry }: { entry: FinalizedEntry }) {
+  const platformColor = PLATFORM_COLORS[entry.platform] ?? '#666677'
+  const st = FINALIZED_STATUS_LABEL[entry.status] ?? { label: entry.status, color: '#888' }
+
+  return (
+    <div className="fin-block">
+      <span className="fin-platform-dot" style={{ background: platformColor }} />
+      <div className="fin-info">
+        <div className="fin-top">
+          <span className="fin-code">{entry.code}</span>
+          <span className="fin-status" style={{ color: st.color }}>{st.label}</span>
+        </div>
+        <div className="fin-customer">{entry.customerName}</div>
+        <div className="fin-driver">
+          {entry.driverName
+            ? entry.driverName
+            : <span className="fin-driver-none">motoboy não identificado</span>
+          }
+        </div>
+      </div>
+      <span className="fin-amount">{formatCurrency(entry.totalAmount)}</span>
     </div>
   )
 }
