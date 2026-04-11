@@ -108,11 +108,12 @@ interface SuggestionBlockProps {
   onDriverChange: (id: string) => void
   onAccept:       () => void
   onReject:       () => void
+  onEdit:         () => void
 }
 
 function SuggestionBlock({
   suggestion, drivers, isSelected, driverValue, loading,
-  onSelect, onDriverChange, onAccept, onReject,
+  onSelect, onDriverChange, onAccept, onReject, onEdit,
 }: SuggestionBlockProps) {
   const total = suggestion.orders.reduce((s, o) => s + o.total_amount, 0)
   const shortId = suggestion.id.slice(0, 8).toUpperCase()
@@ -186,8 +187,7 @@ function SuggestionBlock({
           <button
             className="btn-sug-edit"
             disabled={loading}
-            onClick={() => { /* TODO: edit modal */ }}
-            title="Em breve"
+            onClick={e => { e.stopPropagation(); onEdit() }}
           >
             Editar
           </button>
@@ -247,6 +247,7 @@ export default function Operational() {
   const [driverSelections, setDriverSelections] = useState<Record<string, string>>({})
   const [inProgress, setInProgress]       = useState<InProgressEntry[]>([])
   const [loadingAction, setLoadingAction] = useState<string | null>(null) // suggestionId being acted upon
+  const [editingSuggId, setEditingSuggId] = useState<string | null>(null)
   const [loading, setLoading]             = useState(true)
   const [popupOrderId, setPopupOrderId]   = useState<string | null>(null)
   const storeIdRef                        = useRef<string | null>(null)
@@ -477,6 +478,62 @@ export default function Operational() {
     await fetchAll()
   }
 
+  async function handleEditSave(suggestionId: string, newSequence: Order[]) {
+    const suggestion = suggestions.find(s => s.id === suggestionId)
+    if (!suggestion) return
+
+    const oldIds = new Set(suggestion.orders.map(o => o.id))
+    const newIds = new Set(newSequence.map(o => o.id))
+
+    // Orders removed from this suggestion → back to awaiting_route with priority boost
+    const removedOrders = suggestion.orders.filter(o => !newIds.has(o.id))
+
+    // Orders added that were in_suggestion in another pending suggestion → steal them
+    const addedOrders = newSequence.filter(o => !oldIds.has(o.id))
+    for (const addedOrder of addedOrders) {
+      const otherSugg = suggestions.find(
+        s => s.id !== suggestionId && s.orders.some(o => o.id === addedOrder.id),
+      )
+      if (otherSugg) {
+        const remaining = otherSugg.orders.filter(o => o.id !== addedOrder.id)
+        await supabase.from('dispatch_suggestions').update({
+          status: 'rejected',
+          reviewed_at: new Date().toISOString(),
+        }).eq('id', otherSugg.id)
+        for (const o of remaining) {
+          await supabase.from('orders').update({
+            status: 'awaiting_route',
+            rejection_count: (o.rejection_count ?? 0) + 1,
+          }).eq('id', o.id)
+        }
+      }
+    }
+
+    // Return removed orders to the queue with priority boost
+    for (const o of removedOrders) {
+      await supabase.from('orders').update({
+        status: 'awaiting_route',
+        rejection_count: (o.rejection_count ?? 0) + 1,
+      }).eq('id', o.id)
+    }
+
+    // Mark all orders in the new sequence as in_suggestion
+    if (newSequence.length > 0) {
+      await supabase.from('orders').update({ status: 'in_suggestion' })
+        .in('id', newSequence.map(o => o.id))
+    }
+
+    // Update the suggestion with new sequence and bump version
+    await supabase.from('dispatch_suggestions').update({
+      suggested_sequence: newSequence.map(o => o.id),
+      suggestion_version: (suggestion.suggestion_version ?? 1) + 1,
+      predicted_eta: null,  // ETA invalidated by manual edit
+    }).eq('id', suggestionId)
+
+    setEditingSuggId(null)
+    await fetchAll()
+  }
+
   // ── Derived state ────────────────────────────────────────────────────────────
 
   const selectedSuggestion   = suggestions.find(s => s.id === selectedSuggId) ?? null
@@ -485,6 +542,28 @@ export default function Operational() {
     () => new Set(suggestions.flatMap(s => s.suggested_sequence)),
     [suggestions],
   )
+
+  // Derived data for edit modal
+  const editingSuggestion = useMemo(
+    () => suggestions.find(s => s.id === editingSuggId) ?? null,
+    [suggestions, editingSuggId],
+  )
+  const editingOtherSuggestions = useMemo(
+    () => suggestions.filter(s => s.id !== editingSuggId),
+    [suggestions, editingSuggId],
+  )
+  const editingAvailable = useMemo(() => {
+    if (!editingSuggId) return []
+    const currentEditIds = new Set(editingSuggestion?.suggested_sequence ?? [])
+    const otherSuggOrderIds = new Set(
+      editingOtherSuggestions.flatMap(s => s.suggested_sequence),
+    )
+    return orders.filter(
+      o =>
+        (o.status === 'awaiting_route' && !currentEditIds.has(o.id)) ||
+        (o.status === 'in_suggestion' && otherSuggOrderIds.has(o.id) && !currentEditIds.has(o.id)),
+    )
+  }, [editingSuggId, editingSuggestion, editingOtherSuggestions, orders])
 
   // Route polyline: straight-line coords (used as fallback while OSRM loads)
   const routeCoords = useMemo<[number, number][]>(() => {
@@ -722,6 +801,7 @@ export default function Operational() {
                     onDriverChange={val => setDriverSelections(prev => ({ ...prev, [s.id]: val }))}
                     onAccept={() => handleAccept(s)}
                     onReject={() => handleReject(s)}
+                    onEdit={() => setEditingSuggId(s.id)}
                   />
                 ))
               )
@@ -756,6 +836,197 @@ export default function Operational() {
           </div>
         </div>
       </div>
+
+      {editingSuggestion && (
+        <EditSuggestionModal
+          suggestion={editingSuggestion}
+          availableOrders={editingAvailable}
+          otherSuggestions={editingOtherSuggestions}
+          onSave={handleEditSave}
+          onClose={() => setEditingSuggId(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── EditSuggestionModal ───────────────────────────────────────────────────────
+
+interface EditSuggestionModalProps {
+  suggestion:        SuggestionRow
+  availableOrders:   Order[]
+  otherSuggestions:  SuggestionRow[]
+  onSave:            (suggestionId: string, newSequence: Order[]) => Promise<void>
+  onClose:           () => void
+}
+
+function EditSuggestionModal({
+  suggestion, availableOrders, otherSuggestions, onSave, onClose,
+}: EditSuggestionModalProps) {
+  const [sequence, setSequence]     = useState<Order[]>(suggestion.orders)
+  const [showPicker, setShowPicker] = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [dragIdx, setDragIdx]       = useState<number | null>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+
+  const currentIds = useMemo(() => new Set(sequence.map(o => o.id)), [sequence])
+  const pickable   = availableOrders.filter(o => !currentIds.has(o.id))
+
+  function removeOrder(orderId: string) {
+    setSequence(prev => prev.filter(o => o.id !== orderId))
+  }
+
+  function addOrder(order: Order) {
+    setSequence(prev => [...prev, order])
+    setShowPicker(false)
+  }
+
+  function handleDragStart(idx: number) {
+    setDragIdx(idx)
+  }
+
+  function handleDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault()
+    setDragOverIdx(idx)
+  }
+
+  function handleDrop(idx: number) {
+    if (dragIdx === null || dragIdx === idx) {
+      setDragIdx(null)
+      setDragOverIdx(null)
+      return
+    }
+    const next = [...sequence]
+    const [item] = next.splice(dragIdx, 1)
+    next.splice(idx, 0, item)
+    setSequence(next)
+    setDragIdx(null)
+    setDragOverIdx(null)
+  }
+
+  async function handleSave() {
+    if (sequence.length === 0) return
+    setSaving(true)
+    await onSave(suggestion.id, sequence)
+    setSaving(false)
+  }
+
+  return (
+    <div className="edit-modal-overlay" onClick={onClose}>
+      <div className="edit-modal" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="edit-modal-header">
+          <span>Editar sugestão <strong>#{suggestion.id.slice(0, 8).toUpperCase()}</strong></span>
+          <button className="edit-modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Sequence list */}
+        <div className="edit-modal-body">
+          {sequence.length === 0 ? (
+            <div className="edit-empty">Nenhuma entrega — adicione ao menos uma</div>
+          ) : (
+            sequence.map((order, idx) => {
+              const inOtherSugg = otherSuggestions.find(s => s.orders.some(o => o.id === order.id))
+              return (
+                <div
+                  key={order.id}
+                  className={`edit-stop ${dragOverIdx === idx && dragIdx !== idx ? 'drag-over' : ''} ${dragIdx === idx ? 'dragging' : ''}`}
+                  draggable
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragOver={e => handleDragOver(e, idx)}
+                  onDrop={() => handleDrop(idx)}
+                  onDragEnd={() => { setDragIdx(null); setDragOverIdx(null) }}
+                >
+                  <span className="edit-stop-num">{idx + 1}</span>
+                  <span className="edit-stop-dot" style={{ background: PLATFORM_COLORS[order.platform] }} />
+                  <div className="edit-stop-info">
+                    <div className="edit-stop-customer">{order.customer_name}</div>
+                    <div className="edit-stop-address">{shortAddress(order)}</div>
+                    {inOtherSugg && (
+                      <div className="edit-stop-stolen">
+                        Retirar de #{inOtherSugg.id.slice(0, 8).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="edit-stop-remove"
+                    onClick={() => removeOrder(order.id)}
+                    title="Remover entrega"
+                  >
+                    −
+                  </button>
+                  <div className="edit-stop-drag" title="Arrastar para reordenar">
+                    <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+                      <line x1="0" y1="1"  x2="14" y2="1"  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      <line x1="0" y1="5"  x2="14" y2="5"  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      <line x1="0" y1="9"  x2="14" y2="9"  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                </div>
+              )
+            })
+          )}
+
+          <button className="edit-add-btn" onClick={() => setShowPicker(true)}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Adicionar entrega
+          </button>
+        </div>
+
+        {/* Footer */}
+        <div className="edit-modal-footer">
+          <button className="edit-cancel-btn" onClick={onClose}>Cancelar</button>
+          <button
+            className="edit-save-btn"
+            disabled={saving || sequence.length === 0}
+            onClick={handleSave}
+          >
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+
+      {/* Order picker */}
+      {showPicker && (
+        <div className="edit-picker-overlay" onClick={() => setShowPicker(false)}>
+          <div className="edit-picker" onClick={e => e.stopPropagation()}>
+            <div className="edit-picker-header">
+              <span>Selecionar entrega</span>
+              <button className="edit-modal-close" onClick={() => setShowPicker(false)}>✕</button>
+            </div>
+            <div className="edit-picker-list">
+              {pickable.length === 0 ? (
+                <div className="edit-picker-empty">Nenhuma entrega disponível</div>
+              ) : (
+                pickable.map(order => {
+                  const inOtherSugg = otherSuggestions.find(s => s.orders.some(o => o.id === order.id))
+                  return (
+                    <div
+                      key={order.id}
+                      className="edit-picker-item"
+                      onClick={() => addOrder(order)}
+                    >
+                      <span className="edit-picker-dot" style={{ background: PLATFORM_COLORS[order.platform] }} />
+                      <div className="edit-picker-info">
+                        <div className="edit-picker-customer">{order.customer_name}</div>
+                        <div className="edit-picker-address">{shortAddress(order)}</div>
+                        {inOtherSugg && (
+                          <div className="edit-picker-stolen">
+                            Em sugestão #{inOtherSugg.id.slice(0, 8).toUpperCase()} — será retirado
+                          </div>
+                        )}
+                      </div>
+                      <span className="edit-picker-amount">{formatCurrency(order.total_amount)}</span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
