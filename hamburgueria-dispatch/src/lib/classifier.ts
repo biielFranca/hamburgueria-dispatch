@@ -71,6 +71,66 @@ export function classifyOrder(order: Order): ClassificationResult {
   }
 }
 
+// ── Batch: classify all pending orders (startup + poll fallback) ──────────────
+//
+// Varre pedidos com status='normalized' e os classifica.
+// Garante que nenhum pedido fique preso mesmo se o Realtime INSERT
+// não disparar (ex: Realtime não habilitado na tabela no Supabase).
+
+export async function classifyPendingOrders(storeId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('status', 'normalized')
+
+  if (error || !data?.length) return
+
+  console.debug(`[Classifier] ${data.length} pedido(s) normalized encontrado(s) — classificando...`)
+
+  let triggerEngine = false
+
+  for (const order of data as Order[]) {
+    let geocodedCoords: { latitude: number; longitude: number } | null = null
+
+    if ((order.latitude == null || order.longitude == null) && order.address_street?.trim()) {
+      const geo = await geocodeOrderAddress(
+        order.address_street,
+        order.address_number,
+        order.address_neighborhood,
+        order.address_city,
+        order.address_zip,
+      )
+      if (geo) geocodedCoords = { latitude: geo.latitude, longitude: geo.longitude }
+    }
+
+    const enrichedOrder = geocodedCoords
+      ? { ...order, latitude: geocodedCoords.latitude, longitude: geocodedCoords.longitude }
+      : order as Order
+
+    const result = classifyOrder(enrichedOrder)
+
+    await supabase
+      .from('orders')
+      .update({
+        route_eligibility:  result.route_eligibility,
+        route_block_reason: result.route_block_reason,
+        status:             result.status,
+        ...(geocodedCoords ?? {}),
+      })
+      .eq('id', order.id)
+
+    if (result.status === 'awaiting_route') triggerEngine = true
+  }
+
+  // Um único disparo do engine após classificar o lote
+  if (triggerEngine) {
+    runRouteEngine(storeId).catch(e =>
+      console.error('[Classifier] runRouteEngine error:', e),
+    )
+  }
+}
+
 // ── Supabase Realtime subscription ────────────────────────────────────────────
 
 let classifierChannel: ReturnType<typeof supabase.channel> | null = null
