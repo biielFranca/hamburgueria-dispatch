@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { confirmIfoodDispatch } from '../../lib/integrations/ifood'
 import { confirmOpenDeliveryDispatch } from '../../lib/integrations/openDelivery'
-import { fetchRouteGeometry } from '../../lib/routeEngine'
+import { fetchRouteGeometry, findOptimalSequence } from '../../lib/routeEngine'
 import type { Driver, Order, Platform, Store } from '../../types'
 import OperationalMap, { DISPATCH_GHOST_MS } from './OperationalMap'
 import type { OrderMarkerState } from './OperationalMap'
@@ -842,6 +842,10 @@ export default function Operational() {
           suggestion={editingSuggestion}
           availableOrders={editingAvailable}
           otherSuggestions={editingOtherSuggestions}
+          storeCoord={store?.latitude != null && store?.longitude != null
+            ? [store.latitude, store.longitude]
+            : null
+          }
           onSave={handleEditSave}
           onClose={() => setEditingSuggId(null)}
         />
@@ -856,18 +860,23 @@ interface EditSuggestionModalProps {
   suggestion:        SuggestionRow
   availableOrders:   Order[]
   otherSuggestions:  SuggestionRow[]
+  storeCoord:        [number, number] | null
   onSave:            (suggestionId: string, newSequence: Order[]) => Promise<void>
   onClose:           () => void
 }
 
 function EditSuggestionModal({
-  suggestion, availableOrders, otherSuggestions, onSave, onClose,
+  suggestion, availableOrders, otherSuggestions, storeCoord, onSave, onClose,
 }: EditSuggestionModalProps) {
-  const [sequence, setSequence]     = useState<Order[]>(suggestion.orders)
-  const [showPicker, setShowPicker] = useState(false)
-  const [saving, setSaving]         = useState(false)
-  const [dragIdx, setDragIdx]       = useState<number | null>(null)
+  const [sequence, setSequence]       = useState<Order[]>(suggestion.orders)
+  const [showPicker, setShowPicker]   = useState(false)
+  const [saving, setSaving]           = useState(false)
+  const [optimizing, setOptimizing]   = useState(false)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+
+  // useRef avoids stale-closure bugs in onDrop: state updates are async,
+  // but ref mutations are synchronous, so onDrop always sees the current index.
+  const dragIdxRef = useRef<number | null>(null)
 
   const currentIds = useMemo(() => new Set(sequence.map(o => o.id)), [sequence])
   const pickable   = availableOrders.filter(o => !currentIds.has(o.id))
@@ -876,13 +885,28 @@ function EditSuggestionModal({
     setSequence(prev => prev.filter(o => o.id !== orderId))
   }
 
-  function addOrder(order: Order) {
-    setSequence(prev => [...prev, order])
+  async function addOrder(order: Order) {
+    const newSeq = [...sequence, order]
     setShowPicker(false)
+
+    // Auto-optimize sequence via OSRM when store coords are available
+    if (storeCoord && newSeq.every(o => o.latitude != null && o.longitude != null)) {
+      setOptimizing(true)
+      try {
+        const { sequence: opt } = await findOptimalSequence(storeCoord, newSeq)
+        setSequence(opt)
+      } catch {
+        setSequence(newSeq)
+      } finally {
+        setOptimizing(false)
+      }
+    } else {
+      setSequence(newSeq)
+    }
   }
 
   function handleDragStart(idx: number) {
-    setDragIdx(idx)
+    dragIdxRef.current = idx
   }
 
   function handleDragOver(e: React.DragEvent, idx: number) {
@@ -891,16 +915,18 @@ function EditSuggestionModal({
   }
 
   function handleDrop(idx: number) {
-    if (dragIdx === null || dragIdx === idx) {
-      setDragIdx(null)
-      setDragOverIdx(null)
-      return
-    }
+    const fromIdx = dragIdxRef.current
+    dragIdxRef.current = null
+    setDragOverIdx(null)
+    if (fromIdx === null || fromIdx === idx) return
     const next = [...sequence]
-    const [item] = next.splice(dragIdx, 1)
+    const [item] = next.splice(fromIdx, 1)
     next.splice(idx, 0, item)
     setSequence(next)
-    setDragIdx(null)
+  }
+
+  function handleDragEnd() {
+    dragIdxRef.current = null
     setDragOverIdx(null)
   }
 
@@ -922,7 +948,9 @@ function EditSuggestionModal({
 
         {/* Sequence list */}
         <div className="edit-modal-body">
-          {sequence.length === 0 ? (
+          {optimizing ? (
+            <div className="edit-optimizing">Otimizando rota...</div>
+          ) : sequence.length === 0 ? (
             <div className="edit-empty">Nenhuma entrega — adicione ao menos uma</div>
           ) : (
             sequence.map((order, idx) => {
@@ -930,12 +958,12 @@ function EditSuggestionModal({
               return (
                 <div
                   key={order.id}
-                  className={`edit-stop ${dragOverIdx === idx && dragIdx !== idx ? 'drag-over' : ''} ${dragIdx === idx ? 'dragging' : ''}`}
+                  className={`edit-stop ${dragOverIdx === idx ? 'drag-over' : ''}`}
                   draggable
                   onDragStart={() => handleDragStart(idx)}
                   onDragOver={e => handleDragOver(e, idx)}
                   onDrop={() => handleDrop(idx)}
-                  onDragEnd={() => { setDragIdx(null); setDragOverIdx(null) }}
+                  onDragEnd={handleDragEnd}
                 >
                   <span className="edit-stop-num">{idx + 1}</span>
                   <span className="edit-stop-dot" style={{ background: PLATFORM_COLORS[order.platform] }} />

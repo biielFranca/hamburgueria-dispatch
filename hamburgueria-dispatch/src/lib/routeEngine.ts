@@ -152,39 +152,143 @@ async function handleTimeouts(orders: Order[], storeId: string) {
 
 // ── Proximity pair selection ──────────────────────────────────────────────────
 //
-// Avalia TODOS os pares possíveis e escolhe o que minimiza a rota estimada:
-//   score = min(d(loja,A), d(loja,B)) + d(A,B)
-//
-// Motivo: forçar o pedido de maior prioridade como âncora gera sugestões
-// absurdas quando ele está geograficamente isolado. Pedidos isolados de alta
-// prioridade são tratados pelo timer solo (10 min) e pelo handleTimeouts
-// (dispatch_timeout após 3 recusas), sem prejudicar a qualidade das rotas.
+// Avalia todas as combinações de 2 ou 3 pedidos e escolhe o grupo com o menor
+// custo por entrega (distância haversine nearest-neighbor / num paradas).
+// Isso garante que grupos compactos de 3 pedidos próximos sejam preferidos
+// a pares dispersos, sem nunca forçar agrupamentos ruins.
 
-function selectBestPair(
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function permutations<T>(arr: T[]): T[][] {
+  if (arr.length <= 1) return [arr]
+  return arr.flatMap((item, i) =>
+    permutations([...arr.slice(0, i), ...arr.slice(i + 1)]).map(p => [item, ...p]),
+  )
+}
+
+function combinations<T>(arr: T[], k: number): T[][] {
+  if (k === 0) return [[]]
+  if (arr.length < k) return []
+  const [first, ...rest] = arr
+  return [
+    ...combinations(rest, k - 1).map(c => [first, ...c]),
+    ...combinations(rest, k),
+  ]
+}
+
+/** Greedy nearest-neighbor total distance (for scoring groups). */
+function nearestNeighborScore(storeCoord: [number, number], orders: Order[]): number {
+  let pos = storeCoord
+  const remaining = [...orders]
+  let total = 0
+  while (remaining.length > 0) {
+    let bestDist = Infinity, bestIdx = 0
+    for (let i = 0; i < remaining.length; i++) {
+      const d = haversineKm(pos[0], pos[1], remaining[i].latitude!, remaining[i].longitude!)
+      if (d < bestDist) { bestDist = d; bestIdx = i }
+    }
+    total += bestDist
+    pos = [remaining[bestIdx].latitude!, remaining[bestIdx].longitude!]
+    remaining.splice(bestIdx, 1)
+  }
+  return total
+}
+
+/** Greedy nearest-neighbor ordering (fallback when OSRM unavailable). */
+function nearestNeighborOrder(storeCoord: [number, number], orders: Order[]): Order[] {
+  let pos = storeCoord
+  const remaining = [...orders]
+  const result: Order[] = []
+  while (remaining.length > 0) {
+    let bestDist = Infinity, bestIdx = 0
+    for (let i = 0; i < remaining.length; i++) {
+      const d = haversineKm(pos[0], pos[1], remaining[i].latitude!, remaining[i].longitude!)
+      if (d < bestDist) { bestDist = d; bestIdx = i }
+    }
+    result.push(remaining[bestIdx])
+    pos = [remaining[bestIdx].latitude!, remaining[bestIdx].longitude!]
+    remaining.splice(bestIdx, 1)
+  }
+  return result
+}
+
+const MAX_GROUP = 3  // max deliveries per suggestion
+
+/**
+ * Among all 2- and 3-order subsets, return the most efficient group.
+ * Scored by haversine nearest-neighbor distance / num orders (lower = better).
+ */
+function selectBestGroup(
   orders: Order[],
   storeCoord: [number, number],
-): [Order, Order] {
+): Order[] {
   let bestScore = Infinity
-  let bestI = 0
-  let bestJ = 1
+  let bestGroup: Order[] = []
 
-  for (let i = 0; i < orders.length - 1; i++) {
-    for (let j = i + 1; j < orders.length; j++) {
-      const a = orders[i]
-      const b = orders[j]
-      const dAStore = haversineKm(storeCoord[0], storeCoord[1], a.latitude!, a.longitude!)
-      const dBStore = haversineKm(storeCoord[0], storeCoord[1], b.latitude!, b.longitude!)
-      const dAB    = haversineKm(a.latitude!, a.longitude!, b.latitude!, b.longitude!)
-      const score  = Math.min(dAStore, dBStore) + dAB
+  for (let size = Math.min(MAX_GROUP, orders.length); size >= 2; size--) {
+    for (const group of combinations(orders, size)) {
+      const score = nearestNeighborScore(storeCoord, group) / group.length
       if (score < bestScore) {
         bestScore = score
-        bestI = i
-        bestJ = j
+        bestGroup = group
       }
     }
   }
 
-  return [orders[bestI], orders[bestJ]]
+  return bestGroup
+}
+
+/**
+ * Given store coords and a list of orders, find the optimal delivery sequence
+ * by trying all permutations via OSRM (parallel). Falls back to nearest-neighbour
+ * if OSRM fails. Safe for up to ~6 orders (6! = 720 calls — keep groups ≤ MAX_GROUP).
+ */
+export async function findOptimalSequence(
+  storeCoord: [number, number],
+  orders: Order[],
+): Promise<{ sequence: Order[]; durationSeconds: number | null }> {
+  if (orders.length === 0) return { sequence: [], durationSeconds: null }
+
+  if (orders.length === 1) {
+    let dur: number | null = null
+    try {
+      const r = await getRouteDuration([storeCoord, [orders[0].latitude!, orders[0].longitude!]])
+      dur = r.duration
+    } catch {}
+    return { sequence: orders, durationSeconds: dur }
+  }
+
+  const perms = permutations(orders)
+
+  const settled = await Promise.allSettled(
+    perms.map(p =>
+      getRouteDuration([
+        storeCoord,
+        ...p.map(o => [o.latitude!, o.longitude!] as [number, number]),
+      ]),
+    ),
+  )
+
+  let minDuration = Infinity
+  let bestSequence: Order[] | null = null
+  let bestDuration: number | null = null
+
+  for (let i = 0; i < settled.length; i++) {
+    const r = settled[i]
+    if (r.status === 'fulfilled' && r.value.duration < minDuration) {
+      minDuration = r.value.duration
+      bestSequence = perms[i]
+      bestDuration = r.value.duration
+    }
+  }
+
+  if (!bestSequence) {
+    // All OSRM calls failed — use haversine nearest-neighbor
+    bestSequence = nearestNeighborOrder(storeCoord, orders)
+    bestDuration = null
+  }
+
+  return { sequence: bestSequence, durationSeconds: bestDuration }
 }
 
 // ── Result type ───────────────────────────────────────────────────────────────
@@ -241,38 +345,12 @@ export async function runRouteEngine(storeId: string): Promise<RouteEngineResult
       return { outcome: 'no_coords_on_orders', detail: `${active.length} pedido(s) sem lat/lng` }
     }
 
-    // ── Pair selection (proximity-based) ──────────────────────────────────────
+    // ── Group selection (up to MAX_GROUP orders, proximity-scored) ───────────
 
     if (withCoords.length >= 2) {
-      const [anchor, companion] = selectBestPair(withCoords, storeCoord)
-      const coordAnchor: [number, number] = [anchor.latitude!, anchor.longitude!]
-      const coordComp:   [number, number] = [companion.latitude!, companion.longitude!]
-
-      let bestSequence: Order[]
-      let bestDuration: number
-
-      try {
-        // Sequence 1: store → anchor → companion
-        const seq1 = await getRouteDuration([storeCoord, coordAnchor, coordComp])
-        // Sequence 2: store → companion → anchor
-        const seq2 = await getRouteDuration([storeCoord, coordComp, coordAnchor])
-
-        if (seq1.duration <= seq2.duration) {
-          bestSequence = [anchor, companion]
-          bestDuration = seq1.duration
-        } else {
-          bestSequence = [companion, anchor]
-          bestDuration = seq2.duration
-        }
-      } catch {
-        // OSRM unavailable — use Haversine to pick sequence, no ETA
-        const dAnchorFirst = haversineKm(storeCoord[0], storeCoord[1], coordAnchor[0], coordAnchor[1])
-        const dCompFirst   = haversineKm(storeCoord[0], storeCoord[1], coordComp[0], coordComp[1])
-        bestSequence = dAnchorFirst <= dCompFirst ? [anchor, companion] : [companion, anchor]
-        bestDuration = 0
-      }
-
-      await createSuggestion(storeId, bestSequence, bestDuration || null)
+      const group = selectBestGroup(withCoords, storeCoord)
+      const { sequence: bestSequence, durationSeconds } = await findOptimalSequence(storeCoord, group)
+      await createSuggestion(storeId, bestSequence, durationSeconds || null)
       const codes = bestSequence.map(o => o.platform_order_code ?? o.id.slice(0, 8)).join(' + ')
       return { outcome: 'suggestion_created', detail: codes }
     }
