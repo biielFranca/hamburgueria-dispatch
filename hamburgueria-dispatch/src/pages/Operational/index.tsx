@@ -315,7 +315,14 @@ export default function Operational() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, fetchAll)
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // Poll fallback: refreshes panel even when Realtime events don't fire
+    // (Supabase requires REPLICA IDENTITY FULL for reliable change events)
+    const pollTimer = setInterval(fetchAll, 10_000)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(pollTimer)
+    }
   }, []) // eslint-disable-line
 
   // ── Actions ─────────────────────────────────────────────────────────────────

@@ -146,10 +146,12 @@ export function startClassifier(storeId: string): () => void {
         event: 'INSERT',
         schema: 'public',
         table: 'orders',
-        filter: `store_id=eq.${storeId}`,
+        // Sem filtro server-side: o filtro por store_id exige REPLICA IDENTITY FULL
+        // no Supabase. Sem isso, eventos não chegam. Filtramos client-side abaixo.
       },
       async (payload) => {
         const order = payload.new as Order
+        if (order.store_id !== storeId) return  // filtro client-side
 
         // Se o pedido não tem coordenadas mas tem rua, tenta geocodificar
         // usando CEP + número da casa antes de classificar

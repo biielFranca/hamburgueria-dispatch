@@ -4,7 +4,7 @@ import { startClassifier, classifyPendingOrders } from '../../lib/classifier'
 
 // Varre pedidos 'normalized' que podem ter escapado do Realtime INSERT
 // (ex: Realtime não habilitado para a tabela no Supabase dashboard).
-const CLASSIFIER_POLL_MS = 30_000
+const CLASSIFIER_POLL_MS = 5_000
 
 /**
  * Background component that subscribes to new orders via Supabase Realtime
