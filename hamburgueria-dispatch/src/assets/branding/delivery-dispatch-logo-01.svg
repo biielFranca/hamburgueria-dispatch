@@ -1,0 +1,22 @@
+﻿<svg width="1000" height="280" viewBox="0 0 1000 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1000" height="280" rx="28" fill="#0B0F1A"/>
+
+  <g transform="translate(42 38)">
+    <line x1="0" y1="88" x2="86" y2="88" stroke="#60A5FA" stroke-width="9" stroke-linecap="round"/>
+    <line x1="8" y1="106" x2="78" y2="106" stroke="#3B82F6" stroke-width="7" stroke-linecap="round"/>
+    <line x1="16" y1="123" x2="70" y2="123" stroke="#2563EB" stroke-width="5" stroke-linecap="round"/>
+
+    <circle cx="146" cy="146" r="33" stroke="#F8FAFC" stroke-width="10"/>
+    <circle cx="246" cy="146" r="33" stroke="#F8FAFC" stroke-width="10"/>
+
+    <path d="M118 146H182L212 108H244L263 146" stroke="#F8FAFC" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M201 92L175 92L160 122" stroke="#60A5FA" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <path d="M190 82L214 70L241 70" stroke="#F8FAFC" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="186" cy="68" r="11" fill="#F8FAFC"/>
+  </g>
+
+  <text x="344" y="124" fill="#F8FAFC" font-family="Poppins, Segoe UI, Arial, sans-serif" font-size="64" font-weight="700" letter-spacing="0.5">Delivery</text>
+  <text x="344" y="196" fill="#60A5FA" font-family="Poppins, Segoe UI, Arial, sans-serif" font-size="64" font-weight="700" letter-spacing="0.5">Dispatch</text>
+  <text x="348" y="232" fill="#64748B" font-family="Poppins, Segoe UI, Arial, sans-serif" font-size="20" font-weight="500" letter-spacing="1.2">FAST ROUTING PLATFORM</text>
+</svg>

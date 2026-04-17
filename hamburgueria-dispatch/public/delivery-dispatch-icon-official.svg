@@ -1,0 +1,45 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="dd-official-speed-public" x1="300" y1="0" x2="700" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4FC3F7"/>
+      <stop offset="0.55" stop-color="#1E88E5"/>
+      <stop offset="1" stop-color="#0D47A1"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(-312,120)">
+    <g transform="scale(1.35)">
+    <rect x="520" y="415" width="250" height="16" rx="8" fill="#0A1220"/>
+
+    <rect x="355" y="355" width="250" height="24" rx="12" fill="url(#dd-official-speed-public)"/>
+    <rect x="325" y="415" width="280" height="24" rx="12" fill="url(#dd-official-speed-public)"/>
+    <rect x="370" y="475" width="235" height="24" rx="12" fill="url(#dd-official-speed-public)"/>
+
+    <rect x="455" y="280" width="145" height="130" rx="14" stroke="#0A1220" stroke-width="12"/>
+    <path d="M497 280V297H558V280" stroke="#0A1220" stroke-width="8" stroke-linecap="round"/>
+
+    <circle cx="560" cy="490" r="58" stroke="#0A1220" stroke-width="12"/>
+    <circle cx="560" cy="490" r="22" fill="#0A1220"/>
+    <circle cx="885" cy="490" r="58" stroke="#0A1220" stroke-width="12"/>
+    <circle cx="885" cy="490" r="22" fill="#0A1220"/>
+
+    <path d="M515 490H885" stroke="#0A1220" stroke-width="14" stroke-linecap="round"/>
+    <path d="M500 485C500 438 525 402 583 395H650C700 395 715 418 715 456V486H500Z" stroke="#0A1220" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M715 490C738 486 760 470 760 445V388L810 320L840 320L855 405C860 421 862 435 870 452C879 469 883 478 885 490" stroke="#0A1220" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <path d="M640 300C680 300 706 302 730 306C771 313 785 318 820 330" stroke="#0A1220" stroke-width="12" stroke-linecap="round"/>
+    <path d="M655 275C644 290 635 305 628 324" stroke="#0A1220" stroke-width="12" stroke-linecap="round"/>
+
+    <circle cx="665" cy="165" r="60" stroke="#0A1220" stroke-width="12"/>
+    <path d="M662 154C690 158 714 165 730 178C724 188 720 196 717 207C697 208 678 204 657 196C647 192 639 186 635 180C640 170 648 161 662 154Z" fill="url(#dd-official-speed-public)"/>
+
+    <path d="M620 390C622 330 632 282 666 226C685 194 712 180 740 182" stroke="#0A1220" stroke-width="12" stroke-linecap="round"/>
+    <path d="M652 252C682 287 702 308 728 323" stroke="#0A1220" stroke-width="10" stroke-linecap="round"/>
+
+    <path d="M775 320L825 318" stroke="#0A1220" stroke-width="12" stroke-linecap="round"/>
+    <path d="M824 318C845 310 854 307 872 303V356C853 356 845 353 824 342V318Z" stroke="#0A1220" stroke-width="12" stroke-linejoin="round"/>
+
+    <path d="M430 560H890" stroke="#0A1220" stroke-width="12" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>
