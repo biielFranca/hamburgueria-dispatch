@@ -1,92 +1,92 @@
-# Data Flow
+# Fluxo de Dados
 
-## Summary
-Detailed data flow for the four main operational flows in Hamburgueria Dispatch.
+## Resumo
+Fluxo detalhado dos quatro principais processos operacionais do Hamburgueria Dispatch.
 
-## Source
+## Fonte
 - `.planning/codebase/ARCHITECTURE.md`
 - `hamburgueria-dispatch/src/App.tsx`
 - `hamburgueria-dispatch/src/components/`
 
-## 1. iFood Order Ingestion Flow
+## 1. Ingestão de Pedido iFood
 
 ```
 iFood Merchant API
-  → Supabase Edge Function (ifood-sync)
-    → Normalize payload to internal Order format
-    → INSERT into orders table (platform='ifood')
-      → Supabase Realtime fires INSERT event
+  → Edge Function Supabase (ifood-sync)
+    → Normaliza payload para formato interno de Pedido
+    → INSERT na tabela orders (platform='ifood')
+      → Supabase Realtime dispara evento INSERT
         → ClassifierService.onInsert()
           → classifyOrder(order)
             → UPDATE orders SET route_eligibility, status
-              → If eligible:
-                → RouteEngineService triggers
+              → Se eligible:
+                → RouteEngineService dispara
                 → runRouteEngine(storeId)
-                  → SELECT eligible orders
-                  → Call routing API (pairs 2 orders)
+                  → SELECT pedidos elegíveis
+                  → Chama API de rotas (pareia 2 pedidos)
                   → INSERT dispatch_suggestion + dispatch_suggestion_orders
-                    → Operational page Realtime fires
-                      → fetchAll() re-fetches suggestions
+                    → Realtime da página Operacional dispara
+                      → fetchAll() rebusca sugestões
 ```
 
-## 2. User Login Flow
+## 2. Login do Usuário
 
 ```
-User types username + password
-  → Login page: SELECT users WHERE username = ?
-    → Extracts auth_id
+Usuário digita username + senha
+  → Página Login: SELECT users WHERE username = ?
+    → Extrai auth_id
     → supabase.auth.signInWithPassword({email: username@dispatch.internal, password})
-      → Supabase Auth validates
-        → App.tsx onAuthStateChange fires (SIGNED_IN)
+      → Supabase Auth valida
+        → App.tsx onAuthStateChange dispara (SIGNED_IN)
           → fetchUserRole(): SELECT role, permissions FROM users WHERE auth_id = ?
-            → App state: session, userRole, userPermissions set
-              → Sidebar renders with role-filtered nav
-              → Active page renders (Operational by default)
+            → Estado do App: session, userRole, userPermissions definidos
+              → Sidebar renderiza com navegação filtrada por papel
+              → Página ativa renderiza (Operacional por padrão)
               → localStorage.setItem('dispatch_login_at', Date.now())
 ```
 
-## 3. Alert Flow
+## 3. Fluxo de Alertas
 
 ```
-AlertSystem (setInterval every 20s)
+AlertSystem (setInterval a cada 20s)
   → SELECT orders WHERE status NOT IN (dispatched, cancelled)
-    → For each order:
-      → Calculate age = (now - created_at) in minutes
-      → If age >= 10 AND !firedRef.has(orderId-overdue) → playAlert('critical') + toast
-      → If age >= 9 AND !firedRef.has(orderId-1min) → playAlert('1min') + toast
-      → If age >= 5 AND !firedRef.has(orderId-5min) → playAlert('5min') + toast
-      → firedRef.add(key) to prevent duplicates
+    → Para cada pedido:
+      → Calcula idade = (agora - created_at) em minutos
+      → Se idade >= 10 E !firedRef.has(orderId-overdue) → playAlert('critical') + toast
+      → Se idade >= 9 E !firedRef.has(orderId-1min) → playAlert('1min') + toast
+      → Se idade >= 5 E !firedRef.has(orderId-5min) → playAlert('5min') + toast
+      → firedRef.add(chave) para evitar duplicatas
 ```
 
-## 4. Dispatch Suggestion Accept Flow
+## 4. Aceitar Sugestão de Despacho
 
 ```
-Operator on Operational page:
-  → Selects driver from dropdown
-  → Clicks "Aceitar" on suggestion block
+Operador na página Operacional:
+  → Seleciona motoboy no dropdown
+  → Clica em "Aceitar" no bloco de sugestão
     → UPDATE dispatch_suggestions SET status='dispatched', driver_id=?
       → UPDATE orders SET status='dispatched' WHERE id IN suggestion.order_ids
-        → If platform=ifood: call iFood dispatch confirmation endpoint
-        → Operational map: dispatched orders fade out (ghost animation 60s)
+        → Se platform=ifood: chama endpoint de confirmação de despacho do iFood
+        → Mapa operacional: pedidos despachados somem gradualmente (animação ghost 60s)
 ```
 
-## State Management Pattern
+## Padrão de Gerenciamento de Estado
 
-All state is local React state. No global store. Key state locations:
+Todo estado é local React. Sem store global. Locais principais:
 
-| State | Location | Scope |
-|-------|----------|-------|
-| session, userRole, userPermissions | `App.tsx` | App-wide (passed as props) |
-| activePage | `App.tsx` | Navigation |
-| suggestions, orders, drivers | `Operational/index.tsx` | Page-level |
-| driverSelections | `Operational/index.tsx` | Per-suggestion driver choice |
-| alertCards | `AlertSystem/index.tsx` | Alert toasts |
-| lastSync, lastError | `IfoodPoller/index.tsx` | Integration status indicator |
-| store info | `Settings/index.tsx` | Form state |
+| Estado | Localização | Escopo |
+|--------|-------------|--------|
+| session, userRole, userPermissions | `App.tsx` | App inteiro (passado como props) |
+| activePage | `App.tsx` | Navegação |
+| suggestions, orders, drivers | `Operational/index.tsx` | Nível de página |
+| driverSelections | `Operational/index.tsx` | Escolha de motoboy por sugestão |
+| alertCards | `AlertSystem/index.tsx` | Toasts de alerta |
+| lastSync, lastError | `IfoodPoller/index.tsx` | Indicador de status da integração |
+| dados da loja | `Settings/index.tsx` | Estado do formulário |
 
-## Related Notes
-- [[System Architecture]]
-- [[Classifier]]
-- [[Route Engine]]
-- [[Alert System]]
-- [[iFood Integration]]
+## Notas Relacionadas
+- [[Arquitetura do Sistema]]
+- [[Classificador]]
+- [[Motor de Rotas]]
+- [[Sistema de Alertas]]
+- [[Integração iFood]]

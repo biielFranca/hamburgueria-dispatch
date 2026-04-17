@@ -1,45 +1,45 @@
-# Alert System
+# Sistema de Alertas
 
-## Summary
-Background component that polls for overdue orders every 20 seconds and fires audio + visual alerts based on order age. Prevents duplicate alerts per order/level combination within a session.
+## Resumo
+Componente em background que consulta pedidos atrasados a cada 20 segundos e dispara alertas sonoros + visuais baseados na idade do pedido. Evita alertas duplicados por combinação de pedido/nível dentro de uma sessão.
 
-## Source
+## Fonte
 - `hamburgueria-dispatch/src/components/AlertSystem/index.tsx`
 - `hamburgueria-dispatch/src/lib/alertSound.ts`
 - `tasks_v1.md` — Blocos 7 + 8
 
-## Alert Thresholds
+## Limites de Alerta
 
-| Level | Trigger | Sound | Description |
-|-------|---------|-------|-------------|
-| `5min` | age >= 5 min | 6 paired pulses, ~3.6s | Early warning |
-| `1min` | age >= 9 min | 8 urgent pulses, ~4.2s | Approaching overdue |
-| `critical` | age >= 10 min | 12 intense alternating pulses, ~5.4s | Overdue |
+| Nível | Gatilho | Som | Descrição |
+|-------|---------|-----|-----------|
+| `5min` | idade >= 5 min | 6 pulsos em pares, ~3,6s | Aviso antecipado |
+| `1min` | idade >= 9 min | 8 pulsos urgentes, ~4,2s | Próximo do atraso |
+| `critical` | idade >= 10 min | 12 pulsos alternados intensos, ~5,4s | Atrasado |
 
-## How It Works
+## Como Funciona
 
-### AlertSystem Component
-- Runs `setInterval` every 20 seconds
-- Queries Supabase: all active orders (not dispatched/cancelled) for the store
-- For each order: calculates age from `created_at`
-- Checks `firedRef: Set<string>` keyed by `${orderId}-${level}` for deduplication
-- If threshold met and not fired: plays sound, shows toast card, adds to firedRef
-- Toast auto-dismisses after 7 seconds
+### Componente AlertSystem
+- Executa `setInterval` a cada 20 segundos
+- Consulta Supabase: todos os pedidos ativos (não despachados/cancelados) da loja
+- Para cada pedido: calcula idade a partir de `created_at`
+- Verifica `firedRef: Set<string>` com chave `${orderId}-${level}` para deduplicação
+- Se limiar atingido e não disparado: toca som, exibe toast, adiciona ao firedRef
+- Toast se fecha automaticamente após 7 segundos
 
 ### alertSound.ts
-Web Audio API-based sounds. No external audio files required.
-- Single AudioContext instance (reused across alerts)
-- Uses OscillatorNode with envelope (attack/release) for clean sound
-- `playAlert(level: '5min' | '1min' | 'critical')` — public API
+Sons via Web Audio API. Sem arquivos de áudio externos.
+- Instância única de AudioContext (reutilizada entre alertas)
+- Usa OscillatorNode com envelope (attack/release) para som limpo
+- `playAlert(level: '5min' | '1min' | 'critical')` — API pública
 
-### Mute Button
-Mute state persisted in `localStorage`. Silences audio without disabling visual toasts.
+### Botão de Mudo
+Estado de mudo persistido no `localStorage`. Silencia o áudio sem desativar os toasts visuais.
 
-## Known Issues
-- firedRef is in-memory only — resets on page reload
-- `dispatch_alerts` table exists in DB but may not be used by AlertSystem yet (see [[Pending Work Register]])
-- See [[Pending Work Register]] for audio context bug with rapid alerts
+## Problemas Conhecidos
+- `firedRef` existe apenas em memória — reinicia ao recarregar a página
+- A tabela `dispatch_alerts` existe no banco mas pode não estar sendo usada pelo AlertSystem ainda (ver [[Registro de Pendências]])
+- Ver [[Registro de Pendências]] para o bug de múltiplos AudioContext em alertas rápidos
 
-## Related Notes
-- [[Data Flow]]
-- [[Pending Work Register]]
+## Notas Relacionadas
+- [[Fluxo de Dados]]
+- [[Registro de Pendências]]

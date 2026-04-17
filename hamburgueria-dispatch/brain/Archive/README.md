@@ -1,15 +1,15 @@
-# Archive
+# Arquivo Morto
 
-Old or inactive notes that still have historical value.
+Notas antigas ou inativas que ainda têm valor histórico.
 
-## Rules
-- Archive instead of deleting when the content may still matter.
-- Keep archived notes readable and linked if relevant.
+## Regras
+- Arquivar em vez de deletar quando o conteúdo ainda pode importar.
+- Manter notas arquivadas legíveis e linkadas quando relevante.
 
-## Archived Items
+## Itens Arquivados
 
-### v1 Task Definitions
-The original `tasks_v1.md` file at the workspace root contains the full v1 task breakdown across 8 blocks. Keep as reference — all 64 tasks completed.
+### Definição das Tarefas da v1
+O arquivo original `tasks_v1.md` na raiz do workspace contém o detalhamento completo das tarefas da v1 em 8 blocos. Manter como referência — todas as 64 tarefas concluídas.
 
-### Separate Integrations Page
-Originally the app had a dedicated `src/pages/Integrations/index.tsx` page for managing platform credentials. In v1 this was absorbed into Settings → Connections tab. The old page was removed from navigation but the pattern may be useful if integrations management grows in complexity.
+### Página de Integrações Separada
+Originalmente o app tinha uma página dedicada `src/pages/Integrations/index.tsx` para gerenciar credenciais das plataformas. Na v1 ela foi absorvida pela aba Conexões das Configurações. A página foi removida da navegação, mas o padrão pode ser útil se a gestão de integrações crescer em complexidade.

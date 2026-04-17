@@ -1,114 +1,114 @@
-# System Architecture
+# Arquitetura do Sistema
 
-## Summary
-Tauri 2 desktop application with React 19 frontend, TypeScript, and Supabase as backend (auth + database + edge functions). Runs on Windows via WebView2. No separate backend server — all business logic lives in the frontend with Supabase Functions for sensitive operations.
+## Resumo
+Aplicativo desktop Tauri 2 com frontend React 19, TypeScript e Supabase como backend (auth + banco + edge functions). Roda no Windows via WebView2. Sem servidor backend separado — toda a lógica de negócio fica no frontend, com Supabase Functions para operações sensíveis.
 
-## Source
+## Fonte
 - `.planning/codebase/ARCHITECTURE.md`
 - `.planning/codebase/INTEGRATIONS.md`
 - `hamburgueria-dispatch/src/`
 
-## Repository Structure
+## Estrutura do Repositório
 
 ```
 hamburgueria-dispatch/
 ├─ src/
-│  ├─ App.tsx              # Root component — auth, routing, session
-│  ├─ main.tsx             # React entry point
-│  ├─ types/index.ts       # All domain types and enums
+│  ├─ App.tsx              # Componente raiz — auth, roteamento, sessão
+│  ├─ main.tsx             # Ponto de entrada do React
+│  ├─ types/index.ts       # Todos os tipos de domínio e enums
 │  ├─ lib/
-│  │  ├─ supabase.ts       # Supabase client factory (regular + admin)
-│  │  ├─ classifier.ts     # Order classification logic
-│  │  ├─ routeEngine.ts    # Dispatch route generation
-│  │  ├─ alertSound.ts     # Web Audio API alert sounds
-│  │  ├─ cep.ts            # ViaCEP address lookup
-│  │  ├─ geocoder.ts       # Address geocoding
+│  │  ├─ supabase.ts       # Fábrica de clientes Supabase (regular + admin)
+│  │  ├─ classifier.ts     # Lógica de classificação de pedidos
+│  │  ├─ routeEngine.ts    # Geração de rotas de despacho
+│  │  ├─ alertSound.ts     # Sons de alerta via Web Audio API
+│  │  ├─ cep.ts            # Consulta de endereço via ViaCEP
+│  │  ├─ geocoder.ts       # Geocodificação de endereços
 │  │  └─ integrations/
-│  │     ├─ ifood.ts       # iFood API calls
+│  │     ├─ ifood.ts       # Chamadas à API do iFood
 │  │     └─ openDelivery.ts # Open Delivery (99Food, Keeta, Cardápio Web)
 │  ├─ components/
-│  │  ├─ AlertSystem/      # Background polling + alert toasts
-│  │  ├─ ClassifierService/ # Background Realtime subscription
-│  │  ├─ RouteEngineService/ # Background route generation
-│  │  ├─ IfoodPoller/      # Background iFood sync polling
-│  │  ├─ OrderForm/        # Manual order creation form
+│  │  ├─ AlertSystem/      # Polling em background + toasts de alerta
+│  │  ├─ ClassifierService/ # Assinatura Realtime em background
+│  │  ├─ RouteEngineService/ # Geração de rotas em background
+│  │  ├─ IfoodPoller/      # Polling de sincronização do iFood em background
+│  │  ├─ OrderForm/        # Formulário de criação manual de pedido
 │  │  └─ layout/Sidebar.tsx
 │  └─ pages/
-│     ├─ Login/            # Username/password login
-│     ├─ Operational/      # Main dispatch dashboard + map
-│     ├─ Orders/           # Order list with real-time
-│     ├─ Drivers/          # Driver management
-│     ├─ Users/            # User management (owner/admin)
-│     ├─ Settings/         # Store config (3 tabs)
-│     └─ Dev/              # Dev tools (internal)
+│     ├─ Login/            # Login por usuário/senha
+│     ├─ Operational/      # Painel de despacho principal + mapa
+│     ├─ Orders/           # Lista de pedidos em tempo real
+│     ├─ Drivers/          # Gestão de motoboys
+│     ├─ Users/            # Gestão de usuários (owner/admin)
+│     ├─ Settings/         # Configurações da loja (3 abas)
+│     └─ Dev/              # Ferramentas internas de desenvolvimento
 ├─ src-tauri/
-│  ├─ src/main.rs          # Tauri entry point
-│  └─ src/lib.rs           # Plugin setup (http, opener)
+│  ├─ src/main.rs          # Ponto de entrada do Tauri
+│  └─ src/lib.rs           # Configuração de plugins (http, opener)
 ```
 
-## Architectural Patterns
+## Padrões Arquiteturais
 
-- **No router library** — App.tsx uses `activePage` state + conditional rendering to navigate pages
-- **No state management library** — Everything via React `useState` / `useRef` / `useEffect`
-- **Background polling components** — AlertSystem, IfoodPoller, ClassifierService, RouteEngineService render invisibly and run setInterval/subscription loops
-- **Service layer** — `src/lib/` contains all external API calls, with no direct fetch from pages
-- **Tauri HTTP bridge** — HTTP requests use `@tauri-apps/plugin-http` with fallback to native fetch
+- **Sem biblioteca de roteamento** — `App.tsx` usa estado `activePage` + renderização condicional para navegar entre páginas
+- **Sem biblioteca de estado global** — tudo via React `useState` / `useRef` / `useEffect`
+- **Componentes de polling em background** — AlertSystem, IfoodPoller, ClassifierService, RouteEngineService renderizam de forma invisível e executam loops de setInterval/assinatura
+- **Camada de serviço** — `src/lib/` contém todas as chamadas a APIs externas, sem fetch direto nas páginas
+- **Bridge HTTP do Tauri** — requisições HTTP usam `@tauri-apps/plugin-http` com fallback para fetch nativo
 
-## Module Responsibilities
+## Responsabilidades dos Módulos
 
-| Module | Responsibility |
-|--------|---------------|
-| `App.tsx` | Auth state, session expiry, page routing, role-based access |
-| `types/index.ts` | All domain interfaces and enums (no deps) |
-| `lib/supabase.ts` | Supabase client factory — regular + admin (service key) |
-| `lib/classifier.ts` | Pure function: `classifyOrder(order) → ClassificationResult` |
-| `lib/routeEngine.ts` | `runRouteEngine(storeId)` — fetches eligible orders, calls routing API, creates suggestions |
-| `ClassifierService` | Background: Supabase Realtime INSERT on `orders` → runs classifier → updates DB |
-| `RouteEngineService` | Background: Supabase Realtime on `awaiting_route` → triggers route engine |
-| `AlertSystem` | Background: polls every 20s → fires audio + toast by order age |
-| `IfoodPoller` | Background: polls every 30s via Supabase Edge Function |
+| Módulo | Responsabilidade |
+|--------|-----------------|
+| `App.tsx` | Estado de auth, expiração de sessão, roteamento de páginas, controle de acesso por papel |
+| `types/index.ts` | Todas as interfaces de domínio e enums (sem dependências) |
+| `lib/supabase.ts` | Fábrica de clientes Supabase — regular + admin (service key) |
+| `lib/classifier.ts` | Função pura: `classifyOrder(order) → ClassificationResult` |
+| `lib/routeEngine.ts` | `runRouteEngine(storeId)` — busca pedidos elegíveis, chama API de rotas, cria sugestões |
+| `ClassifierService` | Background: INSERT Realtime em `orders` → executa classificador → atualiza banco |
+| `RouteEngineService` | Background: Realtime em `awaiting_route` → dispara motor de rotas |
+| `AlertSystem` | Background: polling a cada 20s → dispara áudio + toast por idade do pedido |
+| `IfoodPoller` | Background: polling a cada 30s via Supabase Edge Function |
 
-## Command Flow (order ingestion)
-1. iFood Merchant API → `ifood-sync` Supabase Edge Function
-2. Edge Function normalizes payload → inserts into `orders` table
-3. Supabase Realtime fires INSERT event
-4. `ClassifierService` receives event → `classifyOrder()` → updates `route_eligibility` + `status`
-5. If `eligible` → `RouteEngineService` fires → pairs with other eligible orders → creates `dispatch_suggestion`
-6. Operational page receives Realtime update → re-fetches suggestions
-7. Operator selects driver + accepts → status becomes `dispatched`
+## Fluxo de Ingestão de Pedidos
+1. iFood Merchant API → Edge Function `ifood-sync` no Supabase
+2. Edge Function normaliza o payload → insere na tabela `orders`
+3. Supabase Realtime dispara evento INSERT
+4. `ClassifierService` recebe o evento → `classifyOrder()` → atualiza `route_eligibility` + `status`
+5. Se `eligible` → `RouteEngineService` dispara → pareia com outros pedidos elegíveis → cria `dispatch_suggestion`
+6. Página Operacional recebe atualização Realtime → rebusca sugestões
+7. Operador seleciona motoboy + aceita → status vira `dispatched`
 
-## Routing Flow (page navigation)
-- No URL routing. `App.tsx` holds `activePage: number` state
-- `Sidebar.tsx` calls `onNavigate(pageIndex)` on button click
-- `App.tsx` renders `activePage === 0 ? <Operational/> : activePage === 1 ? <Orders/> : ...`
-- Access guards check `userRole` and `userPermissions` before rendering
+## Fluxo de Navegação entre Páginas
+- Sem roteamento por URL. `App.tsx` mantém estado `activePage: number`
+- `Sidebar.tsx` chama `onNavigate(pageIndex)` ao clicar no botão
+- `App.tsx` renderiza `activePage === 0 ? <Operational/> : activePage === 1 ? <Orders/> : ...`
+- Guards de acesso verificam `userRole` e `userPermissions` antes de renderizar
 
-## Configuration Flow
-- `.env` in `hamburgueria-dispatch/` → `import.meta.env.VITE_*` → `lib/supabase.ts`
-- `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` — always required
-- `VITE_SUPABASE_SERVICE_KEY` — optional, enables user management (admin ops)
+## Fluxo de Configuração
+- `.env` em `hamburgueria-dispatch/` → `import.meta.env.VITE_*` → `lib/supabase.ts`
+- `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` — sempre obrigatórios
+- `VITE_SUPABASE_SERVICE_KEY` — opcional, habilita gestão de usuários (operações admin)
 
-## Integration Points
-- **Supabase PostgreSQL** — primary DB, auth, real-time subscriptions
-- **Supabase Auth** — email/password with synthetic `username@dispatch.internal` scheme
-- **Supabase Edge Functions** — `ifood-sync` for iFood order processing
-- **iFood Merchant API** — order events, OAuth2 with client credentials
-- **Open Delivery protocol** — 99Food, Keeta, Cardápio Web (partial)
-- **ViaCEP API** — Brazilian postal code address lookup
-- **External routing API** (Mapbox or Google Maps) — configured via env vars, used by Route Engine
-- **Leaflet / react-leaflet** — map display in Operational page and Settings
+## Pontos de Integração
+- **Supabase PostgreSQL** — banco principal, auth, assinaturas Realtime
+- **Supabase Auth** — email/senha com esquema sintético `username@dispatch.internal`
+- **Supabase Edge Functions** — `ifood-sync` para processamento de pedidos iFood
+- **iFood Merchant API** — eventos de pedido, OAuth2 com client credentials
+- **Protocolo Open Delivery** — 99Food, Keeta, Cardápio Web (parcial)
+- **API ViaCEP** — consulta de endereço por CEP
+- **API de rotas externa** (Mapbox ou Google Maps) — configurada via env vars, usada pelo Motor de Rotas
+- **Leaflet / react-leaflet** — exibição de mapa no Painel Operacional e Configurações
 
-## Inferred Design Philosophy
-- Minimize external deps: no Redux, no router lib, no form lib
-- Desktop-first: Tauri window is the single runtime target
-- Real-time via Supabase subscriptions rather than websockets
-- Keep business logic in `lib/` pure functions, side effects in background components
+## Filosofia de Design (inferida)
+- Minimizar dependências externas: sem Redux, sem lib de roteamento, sem lib de formulários
+- Desktop em primeiro lugar: janela Tauri é o único alvo de execução
+- Tempo real via assinaturas Supabase em vez de websockets
+- Manter lógica de negócio em funções puras em `lib/`, efeitos colaterais em componentes background
 
-## Related Notes
-- [[Data Flow]]
-- [[Database Schema]]
-- [[iFood Integration]]
-- [[Open Delivery Integration]]
-- [[Classifier]]
-- [[Route Engine]]
-- [[Project Overview]]
+## Notas Relacionadas
+- [[Fluxo de Dados]]
+- [[Schema do Banco de Dados]]
+- [[Integração iFood]]
+- [[Integração Open Delivery]]
+- [[Classificador]]
+- [[Motor de Rotas]]
+- [[Visão Geral do Projeto]]

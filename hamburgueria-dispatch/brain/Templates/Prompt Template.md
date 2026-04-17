@@ -1,16 +1,16 @@
-# {{Prompt Title}}
+# {{Título do Prompt}}
 
-## Summary
-What this prompt is for.
+## Resumo
+Para o que este prompt serve.
 
-## Use Case
-Describe when to use it.
+## Caso de Uso
+Descreva quando utilizá-lo.
 
 ## Prompt
-Paste prompt here.
+Cole o prompt aqui.
 
-## Notes
-Important behavior rules, limits, or expected output style.
+## Observações
+Regras importantes de comportamento, limites ou estilo esperado de saída.
 
-## Related Notes
-- [[Prompt Library]]
+## Notas Relacionadas
+- [[Biblioteca de Prompts]]

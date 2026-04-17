@@ -1,22 +1,22 @@
-# Ideas
+# Ideias
 
-Product ideas, technical opportunities, experiments, future improvements, and concepts not yet finalized.
+Ideias de produto, oportunidades técnicas, experimentos, melhorias futuras e conceitos ainda não finalizados.
 
-## Rules
-- One main idea per file when possible.
-- Link to related plans, tasks, and decisions.
-- Promote mature ideas into project or plan notes.
+## Regras
+- Uma ideia principal por arquivo sempre que possível.
+- Linkar para planos, tarefas e decisões relacionadas.
+- Promover ideias maduras para notas de projeto ou plano.
 
-## Current Ideas
+## Ideias Atuais
 
-### Mobile Companion App for Drivers
-Allow drivers to receive dispatch notifications and update delivery status from their phones. Would feed GPS location back to the dispatch map. Requires separate React Native or PWA build.
+### App Mobile Companion para Motoboys
+Permitir que motoboys recebam notificações de despacho e atualizem o status da entrega pelo celular. Enviaria a localização GPS de volta para o mapa de despacho. Exige build separado em React Native ou PWA.
 
-### Multi-Store Support
-Currently each deployment serves one store. A SaaS model would allow one Supabase project to serve multiple stores with full isolation. Key change: all RLS policies already use `store_id` — the DB schema supports this.
+### Suporte Multi-Loja
+Atualmente cada instalação serve uma loja. Um modelo SaaS permitiria que um único projeto Supabase atendesse múltiplas lojas com isolamento total. Mudança principal: todas as políticas RLS já usam `store_id` — o schema do banco já suporta isso.
 
-### Automated Dispatch (No Operator Approval)
-For simple stores with few orders, the system could auto-accept suggestions without operator review. Add a store setting toggle for "auto-dispatch mode" with configurable rules (min driver confidence, max order age, etc.).
+### Despacho Automático (Sem Aprovação do Operador)
+Para lojas simples com poucos pedidos, o sistema poderia auto-aceitar sugestões sem revisão do operador. Adicionar toggle nas configurações da loja para "modo auto-despacho" com regras configuráveis (confiança mínima do motoboy, idade máxima do pedido, etc.).
 
-### Delivery ETA Tracking
-Show customers estimated delivery time based on real routing data. Currently ETAs come from platforms — could augment with Route Engine data for own-logistics orders.
+### Rastreamento de ETA de Entrega
+Exibir ao cliente o tempo estimado de entrega baseado em dados reais de roteamento. Atualmente os ETAs vêm das plataformas — poderia ser complementado com dados do Motor de Rotas para pedidos com logística própria.

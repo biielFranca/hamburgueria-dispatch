@@ -1,222 +1,222 @@
-# Decision Log
+# Registro de Decisões
 
-## Summary
-Explicit and strongly implied architectural decisions made during Hamburgueria Dispatch v1 development.
+## Resumo
+Decisões arquiteturais explícitas e fortemente implícitas tomadas durante o desenvolvimento da v1 do Hamburgueria Dispatch.
 
-## Decision 001
-### Title
-Tauri 2 + React for desktop app
+## Decisão 001
+### Título
+Tauri 2 + React para o app desktop
 
 ### Status
-Accepted
+Aceita
 
-### Context
-Needed a Windows desktop app with web UI capabilities and native system integration. Alternatives: Electron, pure WPF.
+### Contexto
+Necessidade de um app desktop Windows com UI web e integração com o sistema operacional. Alternativas: Electron, WPF puro.
 
-### Decision
-Tauri 2 with React + TypeScript + WebView2.
+### Decisão
+Tauri 2 com React + TypeScript + WebView2.
 
-### Consequences
-- Smaller bundle than Electron
-- Rust backend for system operations
-- WebView2 dependency on Windows (pre-installed on Win11, optional on Win10)
-- Limited Tauri 2 ecosystem maturity
+### Consequências
+- Bundle menor que Electron
+- Backend Rust para operações do sistema
+- Dependência do WebView2 no Windows (pré-instalado no Win11, opcional no Win10)
+- Ecossistema Tauri 2 ainda com maturidade limitada
 
-### Source
+### Fonte
 `.planning/codebase/STACK.md`
 
 ---
 
-## Decision 002
-### Title
-Supabase as sole backend
+## Decisão 002
+### Título
+Supabase como único backend
 
 ### Status
-Accepted
+Aceita
 
-### Context
-Needed database, auth, real-time, and edge functions. No dedicated backend server.
+### Contexto
+Necessidade de banco de dados, auth, tempo real e edge functions. Sem servidor backend dedicado.
 
-### Decision
-Supabase for everything: PostgreSQL, Auth, Realtime subscriptions, Edge Functions.
+### Decisão
+Supabase para tudo: PostgreSQL, Auth, assinaturas Realtime, Edge Functions.
 
-### Consequences
-- No custom backend server to maintain
-- iFood integration handled via Edge Function (avoids CORS and secret exposure)
-- Locked into Supabase pricing/limits
-- Real-time via PostgRES subscriptions (not websockets)
+### Consequências
+- Sem servidor backend próprio para manter
+- Integração iFood via Edge Function (evita CORS e exposição de segredos)
+- Dependência do pricing/limites do Supabase
+- Tempo real via assinaturas PostgRES (não websockets)
 
-### Source
+### Fonte
 `.planning/codebase/INTEGRATIONS.md`
 
 ---
 
-## Decision 003
-### Title
-Synthetic email scheme for auth
+## Decisão 003
+### Título
+Esquema de e-mail sintético para autenticação
 
 ### Status
-Accepted — but flagged as technical debt
+Aceita — mas sinalizada como dívida técnica
 
-### Context
-Store operators don't have personal emails. Supabase Auth requires email format.
+### Contexto
+Operadores da loja não têm e-mails pessoais. O Supabase Auth exige formato de e-mail.
 
-### Decision
-Derive email from username: `{username}@dispatch.internal`. Never send emails.
+### Decisão
+Derivar e-mail a partir do username: `{username}@dispatch.internal`. Nunca enviar e-mails.
 
-### Consequences
-- ✅ Simple for internal operator accounts
-- ❌ No password recovery via email
-- ❌ Supabase could change email validation rules and lock existing users out
-- Risk: migration path to real emails is complex
+### Consequências
+- ✅ Simples para contas internas de operadores
+- ❌ Sem recuperação de senha por e-mail
+- ❌ Supabase poderia mudar regras de validação de e-mail e bloquear usuários existentes
+- Risco: caminho de migração para e-mails reais é complexo
 
-### Source
-`hamburgueria-dispatch/src/pages/Login/index.tsx` (line 39)
+### Fonte
+`hamburgueria-dispatch/src/pages/Login/index.tsx` (linha 39)
 
 ---
 
-## Decision 004
-### Title
-No router library — conditional rendering
+## Decisão 004
+### Título
+Sem biblioteca de roteamento — renderização condicional
 
 ### Status
-Accepted
+Aceita
 
-### Context
-Single-window desktop app. No browser URL bar, no bookmarks, no back/forward.
+### Contexto
+App desktop com janela única. Sem barra de URL, sem favoritos, sem voltar/avançar.
 
-### Decision
-`activePage: number` state in `App.tsx` + ternary rendering. No React Router.
+### Decisão
+Estado `activePage: number` no `App.tsx` + renderização ternária. Sem React Router.
 
-### Consequences
-- ✅ Simpler, fewer deps, faster navigation
-- ❌ No URL-based deep linking
-- ❌ Harder to add sub-pages later without refactor
-- Page guards require manual checks rather than route-level config
+### Consequências
+- ✅ Mais simples, menos dependências, navegação rápida
+- ❌ Sem deep linking por URL
+- ❌ Difícil adicionar sub-páginas no futuro sem refatoração
+- Guards de página exigem verificações manuais em vez de config por rota
 
-### Source
+### Fonte
 `.planning/codebase/ARCHITECTURE.md`
 
 ---
 
-## Decision 005
-### Title
-No Redux/Context — local state only
+## Decisão 005
+### Título
+Sem Redux/Context — apenas estado local
 
 ### Status
-Accepted
+Aceita
 
-### Context
-App is relatively simple flow-wise. Global state concerns: session, userRole, storeId.
+### Contexto
+O app é relativamente simples em termos de fluxo. Preocupações com estado global: sessão, userRole, storeId.
 
-### Decision
-All state via React `useState`/`useRef`. Session + role passed as props from App.
+### Decisão
+Todo estado via React `useState`/`useRef`. Sessão + papel passados como props a partir do App.
 
-### Consequences
-- ✅ Less boilerplate, simpler mental model
-- ❌ `store_id` fetched independently by each component — N duplicate DB queries on mount
-- ❌ No reactive updates between sibling components without prop drilling
+### Consequências
+- ✅ Menos boilerplate, modelo mental mais simples
+- ❌ `store_id` buscado independentemente por cada componente — N queries duplicadas no mount
+- ❌ Sem atualizações reativas entre componentes irmãos sem prop drilling
 
-### Source
+### Fonte
 `.planning/codebase/ARCHITECTURE.md`
 
 ---
 
-## Decision 006
-### Title
-Background polling components instead of global service
+## Decisão 006
+### Título
+Componentes de polling em background em vez de serviço global
 
 ### Status
-Accepted
+Aceita
 
-### Context
-Needed continuous background operations: iFood polling, alert checking, classification, route generation.
+### Contexto
+Necessidade de operações contínuas em background: polling do iFood, verificação de alertas, classificação, geração de rotas.
 
-### Decision
-Each background operation is a React component (AlertSystem, IfoodPoller, ClassifierService, RouteEngineService) rendered invisibly at App root.
+### Decisão
+Cada operação em background é um componente React (AlertSystem, IfoodPoller, ClassifierService, RouteEngineService) renderizado de forma invisível na raiz do App.
 
-### Consequences
-- ✅ Lifecycle tied to React tree (clean unmount)
-- ✅ State stays in component (no global coupling)
-- ❌ Multiple setInterval instances competing
-- ❌ Each has its own storeId fetch on mount
+### Consequências
+- ✅ Ciclo de vida atrelado à árvore React (desmontagem limpa)
+- ✅ Estado fica no componente (sem acoplamento global)
+- ❌ Múltiplas instâncias de setInterval competindo
+- ❌ Cada componente busca storeId independentemente no mount
 
-### Source
+### Fonte
 `.planning/codebase/ARCHITECTURE.md`
 
 ---
 
-## Decision 007
-### Title
-Credentials stored in `store_integrations` table (plaintext)
+## Decisão 007
+### Título
+Credenciais armazenadas na tabela `store_integrations` (texto plano)
 
 ### Status
-Accepted — security debt acknowledged
+Aceita — dívida de segurança reconhecida
 
-### Context
-iFood and Open Delivery require client_id + client_secret per store.
+### Contexto
+iFood e Open Delivery exigem client_id + client_secret por loja.
 
-### Decision
-Store credentials in `store_integrations.client_secret` in plaintext. Access controlled by RLS (owner/admin only).
+### Decisão
+Armazenar credenciais em `store_integrations.client_secret` em texto plano. Acesso controlado por RLS (owner/admin apenas).
 
-### Consequences
-- ✅ Simple implementation
-- ❌ DB admin or breach exposes all credentials
-- Recommendation: Supabase Vault or server-side encryption before storing
+### Consequências
+- ✅ Implementação simples
+- ❌ Admin do banco ou breach expõe todas as credenciais
+- Recomendação: usar Supabase Vault ou criptografar antes de armazenar
 
-### Source
+### Fonte
 `.planning/codebase/CONCERNS.md`
 
 ---
 
-## Decision 008
-### Title
-VITE_SUPABASE_SERVICE_KEY in frontend env
+## Decisão 008
+### Título
+VITE_SUPABASE_SERVICE_KEY no .env do frontend
 
 ### Status
-Accepted — high-risk debt
+Aceita — dívida de alto risco
 
-### Context
-User management requires service role key for `supabaseAdmin` client.
+### Contexto
+Gestão de usuários exige a service role key para o cliente `supabaseAdmin`.
 
-### Decision
-Service key provided via `VITE_SUPABASE_SERVICE_KEY` environment variable, accessible in browser bundle.
+### Decisão
+Service key fornecida via variável de ambiente `VITE_SUPABASE_SERVICE_KEY`, acessível no bundle do browser.
 
-### Consequences
-- ❌ Critical: Key potentially exposed in production bundle
-- ❌ Anyone with access to the Tauri binary could extract the key
-- Mitigation needed: Move all admin operations to Supabase Edge Functions. Remove service key from frontend.
+### Consequências
+- ❌ Crítico: chave potencialmente exposta no bundle de produção
+- ❌ Qualquer pessoa com acesso ao binário Tauri pode extrair a chave
+- Mitigação necessária: mover todas as operações admin para Supabase Edge Functions. Remover service key do frontend.
 
-### Source
+### Fonte
 `.planning/codebase/CONCERNS.md`
 
 ---
 
-## Decision 009
-### Title
-Permissions as JSONB column on users table
+## Decisão 009
+### Título
+Permissões como coluna JSONB na tabela users
 
 ### Status
-Accepted
+Aceita
 
-### Context
-Operators needed granular page access control beyond simple role hierarchy.
+### Contexto
+Operadores precisavam de controle granular de acesso por página, além da hierarquia simples de papéis.
 
-### Decision
-`permissions jsonb DEFAULT '{"operational":true,"orders":true,"drivers":true}'` on `users` table. App.tsx `hasAccess()` checks both `role` and `permissions`.
+### Decisão
+`permissions jsonb DEFAULT '{"operational":true,"orders":true,"drivers":true}'` na tabela `users`. A função `hasAccess()` do App.tsx verifica tanto `role` quanto `permissions`.
 
-### Consequences
-- ✅ Flexible: add new permissions without schema change
-- ✅ Per-user granularity within operator role
-- ❌ No enforcement on DB level — only frontend guards
+### Consequências
+- ✅ Flexível: adicionar novas permissões sem alterar o schema
+- ✅ Granularidade por usuário dentro do papel de operador
+- ❌ Sem enforcement no nível do banco — apenas guards no frontend
 
-### Source
+### Fonte
 `task-log.md` — Bloco 9
 
 ---
 
-## Related Notes
-- [[Project Overview]]
-- [[Auth System]]
-- [[Pending Work Register]]
-- [[System Architecture]]
+## Notas Relacionadas
+- [[Visão Geral do Projeto]]
+- [[Sistema de Autenticação]]
+- [[Registro de Pendências]]
+- [[Arquitetura do Sistema]]

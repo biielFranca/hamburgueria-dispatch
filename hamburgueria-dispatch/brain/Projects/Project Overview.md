@@ -1,65 +1,65 @@
-# Project Overview
+# Visão Geral do Projeto
 
-## Summary
-Hamburgueria Dispatch is a Windows desktop application for managing food delivery dispatch operations. It receives orders from food platforms (iFood, 99Food, Keeta, Cardápio Web), classifies them logistically, groups them into optimal delivery routes, and dispatches drivers.
+## Resumo
+Hamburgueria Dispatch é um aplicativo desktop Windows para gerenciamento de despacho de delivery. Recebe pedidos de plataformas (iFood, 99Food, Keeta, Cardápio Web), classifica-os logisticamente, agrupa em rotas ótimas e despacha motoboys.
 
-## Source
-- `hamburgueria-dispatch/` — main codebase
-- `tasks_v1.md` — v1 task definitions
-- `task-log.md` — execution history
+## Fonte
+- `hamburgueria-dispatch/` — código principal
+- `tasks_v1.md` — definição das tarefas da v1
+- `task-log.md` — histórico de execução
 - `.planning/codebase/ARCHITECTURE.md`
 
-## Purpose
-Eliminate manual dispatch coordination for food delivery stores. The app centralizes order intake, route optimization, and driver assignment in a single desktop dashboard for operators.
+## Objetivo
+Eliminar o despacho manual em hamburguerias e restaurantes com delivery próprio. O app centraliza recebimento de pedidos, otimização de rotas e atribuição de motoboys em um painel desktop para operadores.
 
-## Current Scope
+## Escopo Atual
 
-### Implemented (v1 — all 64 tasks completed)
-- Multi-platform order ingestion (iFood live, others in development)
-- Logistic classifier with 5 rules + default (eligible/blocked/awaiting/external_monitoring)
-- Route engine: pairs 2 orders optimally using external routing API, creates dispatch suggestions
-- Dispatch panel (Operational page): map view, driver assignment, accept/reject suggestions
-- Alert system: time-based warnings at 5min, 1min, and overdue thresholds with audio
-- Settings page: store config with Leaflet map, CEP auto-fill
-- User management with role-based access (owner/admin/operator) + per-page permissions
-- iFood integration with OAuth token caching and 30s polling
-- CEP auto-fill in order form and store settings via ViaCEP API
+### Implementado (v1 — 64/64 tarefas concluídas)
+- Ingestão de pedidos multi-plataforma (iFood ativo, demais em desenvolvimento)
+- Classificador logístico com 5 regras + padrão (eligible/blocked/awaiting/external_monitoring)
+- Motor de rotas: pareia 2 pedidos de forma ótima via API de rotas externa, cria sugestões de despacho
+- Painel operacional: visualização no mapa, atribuição de motoboy, aceitar/recusar sugestões
+- Sistema de alertas: avisos por tempo (5min, 1min, atrasado) com áudio
+- Página de configurações: dados da loja com mapa Leaflet e preenchimento por CEP
+- Gestão de usuários com controle de acesso por papel (owner/admin/operator) + permissões por página
+- Integração iFood com cache de token OAuth e polling a cada 30s
+- Preenchimento automático de endereço por CEP no formulário de pedido e nas configurações
 
-### Not in scope (v1)
-- Offline support
-- Driver GPS tracking
-- Push/desktop notifications
-- Order history/audit trail
-- Batch accept/reject operations
+### Fora do escopo (v1)
+- Suporte offline
+- Rastreamento GPS do motoboy
+- Notificações push/desktop
+- Histórico de pedidos / trilha de auditoria
+- Operações em lote (aceitar/recusar múltiplos)
 
-## Major Modules
-- **Classifier** (`src/lib/classifier.ts` + `src/components/ClassifierService/`) — classifies incoming orders
-- **Route Engine** (`src/lib/routeEngine.ts` + `src/components/RouteEngineService/`) — generates dispatch suggestions
-- **Alert System** (`src/components/AlertSystem/`) — time-based order alerts with audio
-- **iFood Integration** (`src/lib/integrations/ifood.ts` + `src/components/IfoodPoller/`) — order sync
-- **Open Delivery** (`src/lib/integrations/openDelivery.ts`) — 99Food, Keeta, Cardápio Web (partial)
-- **Operational** (`src/pages/Operational/`) — main dispatch UI with map
-- **Orders** (`src/pages/Orders/`) — order list with real-time updates
-- **Settings** (`src/pages/Settings/`) — 3-tab settings: General, Connections, Plan
+## Módulos Principais
+- **Classificador** (`src/lib/classifier.ts` + `src/components/ClassifierService/`) — classifica pedidos recebidos
+- **Motor de Rotas** (`src/lib/routeEngine.ts` + `src/components/RouteEngineService/`) — gera sugestões de despacho
+- **Sistema de Alertas** (`src/components/AlertSystem/`) — alertas por tempo com áudio
+- **Integração iFood** (`src/lib/integrations/ifood.ts` + `src/components/IfoodPoller/`) — sincronização de pedidos
+- **Open Delivery** (`src/lib/integrations/openDelivery.ts`) — 99Food, Keeta, Cardápio Web (parcial)
+- **Operacional** (`src/pages/Operational/`) — painel principal com mapa
+- **Pedidos** (`src/pages/Orders/`) — lista de pedidos com atualizações em tempo real
+- **Configurações** (`src/pages/Settings/`) — 3 abas: Configurações Gerais, Conexões, Meu Plano
 
-## Important Workflows
-1. Order ingestion: platform webhook → Supabase Edge Function → `orders` table → Classifier → `awaiting_route`
-2. Route suggestion: Route Engine polls `eligible` orders → pairs them → inserts `dispatch_suggestion`
-3. Dispatch: Operator accepts suggestion + selects driver → status `dispatched`
-4. Alerts: AlertSystem polls orders every 20s → fires audio + visual alerts by age
+## Fluxos Importantes
+1. Ingestão: webhook da plataforma → Edge Function Supabase → tabela `orders` → Classificador → `awaiting_route`
+2. Sugestão de rota: Motor de Rotas busca pedidos `eligible` → pareia → insere `dispatch_suggestion`
+3. Despacho: operador aceita sugestão + escolhe motoboy → status `dispatched`
+4. Alertas: AlertSystem consulta pedidos a cada 20s → dispara áudio + alerta visual por idade
 
-## Current State
-v1 shipped and functional. No automated tests. Known security issues (service key in frontend, no plaintext passwords fixed yet). Performance improvements planned.
+## Estado Atual
+v1 entregue e funcional. Sem testes automatizados. Problemas de segurança conhecidos (service key no frontend, credenciais em texto plano). Melhorias de performance planejadas.
 
-## Known Unfinished Areas
-- Open Delivery integrations (99Food, Keeta, Cardápio Web) — UI hidden, lib exists
-- Offline support — not started
-- Automated test suite — not started
-- Driver tracking — not started
-- Order history/audit trail — not started
+## Áreas Incompletas Conhecidas
+- Integrações Open Delivery (99Food, Keeta, Cardápio Web) — UI oculta, lib existe
+- Suporte offline — não iniciado
+- Suite de testes automatizados — não iniciada
+- Rastreamento de motoboy — não iniciado
+- Histórico de pedidos / trilha de auditoria — não iniciado
 
-## Related Notes
-- [[System Architecture]]
-- [[Decision Log]]
-- [[Pending Work Register]]
+## Notas Relacionadas
+- [[Arquitetura do Sistema]]
+- [[Registro de Decisões]]
+- [[Registro de Pendências]]
 - [[Roadmap]]

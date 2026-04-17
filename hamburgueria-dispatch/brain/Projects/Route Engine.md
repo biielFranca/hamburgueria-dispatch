@@ -1,47 +1,46 @@
-# Route Engine
+# Motor de Rotas
 
-## Summary
-Automatically pairs eligible orders and generates optimal dispatch route suggestions. Compares both delivery sequences to find the fastest route, then creates a `dispatch_suggestion` for the operator to review.
+## Resumo
+Pareia automaticamente pedidos elegíveis e gera sugestões de rota de despacho otimizadas. Compara as duas sequências de entrega para encontrar a mais rápida, depois cria uma `dispatch_suggestion` para o operador revisar.
 
-## Source
+## Fonte
 - `hamburgueria-dispatch/src/lib/routeEngine.ts`
 - `hamburgueria-dispatch/src/components/RouteEngineService/index.tsx`
 - `tasks_v1.md` — Bloco 4
 
-## How It Works
+## Como Funciona
 
 ### runRouteEngine(storeId: string)
-Main coordinator function in `routeEngine.ts`:
+Função coordenadora principal em `routeEngine.ts`:
 
-1. **Fetch eligible orders**: SELECT orders WHERE `route_eligibility = 'eligible'` AND `status = 'awaiting_route'` AND `store_id = ?`, ordered by `rejection_count DESC`, `created_at ASC`
-2. **Query routing API**: Given store origin + 2 order destinations, get travel time + distance (motorcycle profile)
-3. **Compare sequences**: Calculate time for A→B and B→A, choose shorter
-4. **Create suggestion**: INSERT into `dispatch_suggestions` + `dispatch_suggestion_orders` with `status = 'pending_review'`
+1. **Busca pedidos elegíveis**: SELECT orders WHERE `route_eligibility = 'eligible'` E `status = 'awaiting_route'` E `store_id = ?`, ordenados por `rejection_count DESC`, `created_at ASC`
+2. **Consulta API de rotas**: dado origem da loja + 2 destinos dos pedidos, retorna tempo de viagem + distância (perfil de moto)
+3. **Compara sequências**: calcula tempo de A→B e B→A, escolhe o menor
+4. **Cria sugestão**: INSERT em `dispatch_suggestions` + `dispatch_suggestion_orders` com `status = 'pending_review'`
 
-### Single-Order Logic
-If only 1 eligible order exists and it's been waiting >10 minutes: creates single-order suggestion instead of waiting for a pair.
+### Lógica de Pedido Único
+Se existe apenas 1 pedido elegível e ele está esperando há mais de 10 minutos: cria sugestão de pedido único em vez de aguardar um par.
 
-### Rejection Handling
-- Each rejection increments `rejection_count` on the order
-- After 3 rejections without pairing: mark as `dispatch_timeout`, show alert on panel
+### Tratamento de Rejeições
+- Cada rejeição incrementa `rejection_count` no pedido
+- Após 3 rejeições sem pareamento: marca como `dispatch_timeout` e exibe alerta no painel
 
-### RouteEngineService Component
-Background component. Subscribes to Supabase Realtime on `orders` table.
-Triggers `runRouteEngine(storeId)` whenever an order is updated to `status = 'awaiting_route'`.
+### Componente RouteEngineService
+Componente em background. Assina Realtime do Supabase na tabela `orders`.
+Dispara `runRouteEngine(storeId)` sempre que um pedido é atualizado para `status = 'awaiting_route'`.
 
-## External Routing API
-- Configured via env vars: `VITE_ROUTES_API_KEY` and `VITE_ROUTES_API_URL`
-- Recommended: Mapbox or Google Maps
-- Profile: motorcycle (optimizes for delivery timing)
-- Returns: travel time (seconds) + distance (meters) per segment
+## API de Rotas Externa
+- Configurada via env vars: `VITE_ROUTES_API_KEY` e `VITE_ROUTES_API_URL`
+- Recomendado: Mapbox ou Google Maps
+- Perfil: moto (otimiza para tempo de entrega)
+- Retorna: tempo de viagem (segundos) + distância (metros) por segmento
 
-## Priorities
-Orders are prioritized by:
-1. `rejection_count DESC` — most-rejected orders get paired first
-2. `created_at ASC` — oldest first within same rejection count
+## Priorização dos Pedidos
+1. `rejection_count DESC` — pedidos mais rejeitados são pareados primeiro
+2. `created_at ASC` — mais antigos primeiro dentro do mesmo nível de rejeição
 
-## Related Notes
-- [[Classifier]]
-- [[Data Flow]]
-- [[Database Schema]]
-- [[System Architecture]]
+## Notas Relacionadas
+- [[Classificador]]
+- [[Fluxo de Dados]]
+- [[Schema do Banco de Dados]]
+- [[Arquitetura do Sistema]]

@@ -1,97 +1,98 @@
-# Prompt Library
+# Biblioteca de Prompts
 
-## Summary
-Reusable prompts and AI workflow instructions for Hamburgueria Dispatch development.
+## Resumo
+Prompts reutilizáveis e instruções de fluxo de IA para o desenvolvimento do Hamburgueria Dispatch.
 
-## Categories
-- Security hardening
-- Feature development
-- Test generation
-- Code review
-- Database migrations
+## Categorias
+- Hardening de segurança
+- Desenvolvimento de funcionalidades
+- Geração de testes
+- Revisão de código
+- Migrations de banco de dados
 
-## Prompt Index
+## Índice de Prompts
 
-### Security: Remove Service Key from Frontend
+### Segurança: Remover Service Key do Frontend
 ```
-The file hamburgueria-dispatch/src/lib/supabase.ts contains a `supabaseAdmin` 
-client initialized with VITE_SUPABASE_SERVICE_KEY. 
+O arquivo hamburgueria-dispatch/src/lib/supabase.ts contém um cliente `supabaseAdmin`
+inicializado com VITE_SUPABASE_SERVICE_KEY.
 
-Create a Supabase Edge Function that handles these admin operations:
-1. Create user (POST /admin/users)
-2. Update user password (PATCH /admin/users/:id)
-3. Delete user (DELETE /admin/users/:id)
+Crie uma Supabase Edge Function que trate estas operações admin:
+1. Criar usuário (POST /admin/users)
+2. Atualizar senha do usuário (PATCH /admin/users/:id)
+3. Deletar usuário (DELETE /admin/users/:id)
 
-The Edge Function should:
-- Authenticate via the standard Supabase JWT (operator must be owner/admin)
-- Use the service key server-side only
-- Return appropriate error messages
+A Edge Function deve:
+- Autenticar via JWT padrão do Supabase (operador deve ser owner/admin)
+- Usar a service key apenas no lado servidor
+- Retornar mensagens de erro apropriadas
 
-Then update src/pages/Users/index.tsx to call this Edge Function instead of supabaseAdmin.
-```
-
-### Generate Classifier Tests
-```
-The file hamburgueria-dispatch/src/lib/classifier.ts exports classifyOrder(order: Order): ClassificationResult.
-
-It has 5 rules + a default case. Generate a complete Vitest test suite covering:
-1. Rule 1: pickup → blocked/pickup_order
-2. Rule 2: logistics_type=platform → external_monitoring
-3. Rule 3: null lat/lng → awaiting/missing_coordinates
-4. Rule 4: empty address_street → blocked/invalid_address
-5. Rule 5: ETA > 30min future → awaiting/scheduled
-6. Default: none of above → eligible + status=awaiting_route
-7. Edge: all fields empty/null
-8. Edge: ETA exactly 30min from now (boundary)
-
-Read the Order type from src/types/index.ts first.
+Em seguida, atualize src/pages/Users/index.tsx para chamar esta Edge Function
+em vez do supabaseAdmin.
 ```
 
-### Create useStoreId Hook
+### Gerar Testes do Classificador
 ```
-In hamburgueria-dispatch/src/, multiple components independently fetch store_id 
-from the users table on every mount:
+O arquivo hamburgueria-dispatch/src/lib/classifier.ts exporta
+classifyOrder(order: Order): ClassificationResult.
+
+Ele tem 5 regras + um caso padrão. Gere uma suite completa de testes Vitest cobrindo:
+1. Regra 1: pickup → blocked/pickup_order
+2. Regra 2: logistics_type=platform → external_monitoring
+3. Regra 3: lat/lng nulos → awaiting/missing_coordinates
+4. Regra 4: address_street vazio → blocked/invalid_address
+5. Regra 5: ETA > 30min no futuro → awaiting/scheduled
+6. Padrão: nenhuma das anteriores → eligible + status=awaiting_route
+7. Edge: todos os campos vazios/nulos
+8. Edge: ETA exatamente 30min a partir de agora (limite)
+
+Leia o tipo Order em src/types/index.ts primeiro.
+```
+
+### Criar Hook useStoreId
+```
+Em hamburgueria-dispatch/src/, múltiplos componentes buscam store_id
+da tabela users de forma independente a cada mount:
 - src/pages/Orders/index.tsx
 - src/pages/Operational/index.tsx
 - src/components/IfoodPoller/index.tsx
 - src/components/AlertSystem/index.tsx
 - src/pages/Drivers/index.tsx
-- src/pages/Integrations/index.tsx (removed but pattern exists)
 - src/pages/Users/index.tsx
 
-Create src/lib/hooks/useStoreId.ts that:
-1. Fetches store_id once from supabase.auth.getUser() → users table
-2. Caches the result (React Context or module-level cache)
-3. Returns { storeId: string | null, loading: boolean, error: string | null }
-4. Works safely with multiple concurrent callers (deduplicates the DB query)
+Crie src/lib/hooks/useStoreId.ts que:
+1. Busca store_id uma única vez via supabase.auth.getUser() → tabela users
+2. Cacheia o resultado (React Context ou cache em nível de módulo)
+3. Retorna { storeId: string | null, loading: boolean, error: string | null }
+4. Funciona com segurança para múltiplos chamadores simultâneos (deduplica a query)
 
-Then replace one of the existing store_id fetch patterns as a proof of concept.
+Em seguida, substitua um dos padrões existentes de busca de store_id como prova de conceito.
 ```
 
-### Fix iFood Poller Toggle Bug
+### Corrigir Bug do Toggle do iFood Poller
 ```
-The file hamburgueria-dispatch/src/components/IfoodPoller/index.tsx reads the 
-iFood integration active status once on mount (from store_integrations table).
+O arquivo hamburgueria-dispatch/src/components/IfoodPoller/index.tsx lê o
+status ativo da integração iFood uma única vez no mount (da tabela store_integrations).
 
-When the user toggles active/inactive in Settings → Connections tab, the poller 
-doesn't react until page reload.
+Quando o usuário ativa/desativa em Configurações → aba Conexões, o poller
+não reage até o reload da página.
 
-Fix this by:
-1. Adding a Supabase Realtime subscription to the store_integrations table
-2. When the record for the current storeId changes, update the activeRef
-3. If active becomes false: stop polling (clearInterval)
-4. If active becomes true: start polling (setInterval)
-5. Clean up subscription on component unmount
+Corrija isso:
+1. Adicionando uma assinatura Realtime do Supabase à tabela store_integrations
+2. Quando o registro do storeId atual mudar, atualizar o activeRef
+3. Se active virar false: parar o polling (clearInterval)
+4. Se active virar true: iniciar o polling (setInterval)
+5. Limpar a assinatura ao desmontar o componente
 
-Read the current implementation fully before making changes.
+Leia a implementação atual completamente antes de fazer alterações.
 ```
 
-## Usage Rules
-- Always read the relevant source files before running a prompt
-- Specify file paths explicitly in the prompt
-- Prefer prompts that are idempotent (safe to re-run)
-- Store only prompts worth reusing across sessions
+## Regras de Uso
+- Sempre leia os arquivos fonte relevantes antes de executar um prompt
+- Especifique caminhos de arquivo explicitamente no prompt
+- Prefira prompts idempotentes (seguros de re-executar)
+- Armazene apenas prompts que valem a pena reutilizar entre sessões
 
-## Related Notes
-- [[Pending Work Register]]
-- [[Main Knowledge Map]]
+## Notas Relacionadas
+- [[Registro de Pendências]]
+- [[Mapa de Conhecimento Principal]]

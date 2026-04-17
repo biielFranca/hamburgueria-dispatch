@@ -1,51 +1,51 @@
-# Classifier
+# Classificador
 
-## Summary
-Pure function that classifies incoming orders by route eligibility. Runs as a background Supabase Realtime subscriber. Determines whether orders should enter the dispatch queue, be blocked, or wait.
+## Resumo
+Função pura que classifica os pedidos recebidos por elegibilidade de rota. Executa como assinante Realtime do Supabase em background. Determina se os pedidos devem entrar na fila de despacho, ser bloqueados ou aguardar.
 
-## Source
+## Fonte
 - `hamburgueria-dispatch/src/lib/classifier.ts`
 - `hamburgueria-dispatch/src/components/ClassifierService/index.tsx`
 - `tasks_v1.md` — Bloco 3
 
-## How It Works
+## Como Funciona
 
 ### classifier.ts
-Pure function — no side effects, no DB calls:
+Função pura — sem efeitos colaterais, sem chamadas ao banco:
 ```typescript
 classifyOrder(order: Order): ClassificationResult {
-  // Returns { route_eligibility, route_block_reason, status }
+  // Retorna { route_eligibility, route_block_reason, status }
 }
 ```
 
-### 5 Rules + Default
+### 5 Regras + Padrão
 
-| Priority | Condition | Result |
-|----------|-----------|--------|
+| Prioridade | Condição | Resultado |
+|------------|----------|-----------|
 | 1 | `delivery_type === 'pickup'` | `blocked / pickup_order` |
 | 2 | `logistics_type === 'platform'` | `external_monitoring` |
-| 3 | `latitude` or `longitude` is null | `awaiting / missing_coordinates` |
-| 4 | `address_street` is empty/null | `blocked / invalid_address` |
-| 5 | `estimated_delivery_at > now + 30min` | `awaiting / scheduled` |
-| default | None matched | `eligible` → status `awaiting_route` |
+| 3 | `latitude` ou `longitude` é null | `awaiting / missing_coordinates` |
+| 4 | `address_street` vazio/null | `blocked / invalid_address` |
+| 5 | `estimated_delivery_at > agora + 30min` | `awaiting / scheduled` |
+| padrão | Nenhuma regra acionada | `eligible` → status `awaiting_route` |
 
-### ClassifierService Component
-Background component mounted in App root. No visible UI.
-- Subscribes to Supabase Realtime INSERT on `orders` table
-- On new order: calls `classifyOrder()` → UPDATE `route_eligibility`, `route_block_reason`, `status`
+### Componente ClassifierService
+Componente em background montado na raiz do App. Sem UI visível.
+- Assina INSERT Realtime do Supabase na tabela `orders`
+- A cada novo pedido: chama `classifyOrder()` → UPDATE `route_eligibility`, `route_block_reason`, `status`
 
-## Route Eligibility Values
-- `eligible` — enters dispatch queue, status → `awaiting_route`
-- `blocked` — will never enter queue, reason logged
-- `awaiting` — temporarily holding, can become eligible later
-- `external_monitoring` — handled by platform's own logistics (e.g. Keeta), shown on map only
+## Valores de route_eligibility
+- `eligible` — entra na fila de despacho, status → `awaiting_route`
+- `blocked` — nunca entrará na fila, motivo registrado
+- `awaiting` — aguardando temporariamente, pode se tornar elegível depois
+- `external_monitoring` — gerenciado pela logística da própria plataforma (ex: Keeta), exibido apenas no mapa
 
-## Design Notes
-- Classifier is stateless and pure — easy to unit test (though tests don't exist yet)
-- Keeta orders always land in `external_monitoring` regardless of other fields — see Open Delivery integration
+## Observações de Design
+- Classificador é stateless e puro — fácil de testar unitariamente (embora testes não existam ainda)
+- Pedidos da Keeta sempre caem em `external_monitoring` independente dos demais campos — ver [[Integração Open Delivery]]
 
-## Related Notes
-- [[Route Engine]]
-- [[Data Flow]]
-- [[Database Schema]]
-- [[Open Delivery Integration]]
+## Notas Relacionadas
+- [[Motor de Rotas]]
+- [[Fluxo de Dados]]
+- [[Schema do Banco de Dados]]
+- [[Integração Open Delivery]]

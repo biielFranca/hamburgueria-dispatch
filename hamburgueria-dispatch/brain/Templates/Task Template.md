@@ -1,23 +1,23 @@
-# {{Task Group}}
+# {{Grupo de Tarefas}}
 
-## Summary
-What this pending work area is about.
+## Resumo
+Sobre o que é esta área de trabalho pendente.
 
-## Source
+## Fonte
 - TODO
 - FIXME
-- Missing implementation
-- Review note
+- Implementação faltante
+- Nota de revisão
 
-## Tasks
-- [ ] Task
-- [ ] Task
-- [ ] Task
+## Tarefas
+- [ ] Tarefa
+- [ ] Tarefa
+- [ ] Tarefa
 
-## Blockers
-- Blocker
-- Blocker
+## Bloqueadores
+- Bloqueador
+- Bloqueador
 
-## Related Notes
-- [[Pending Work Register]]
+## Notas Relacionadas
+- [[Registro de Pendências]]
 - [[Roadmap]]

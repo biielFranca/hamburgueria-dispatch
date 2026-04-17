@@ -1,33 +1,33 @@
-# {{Project Name}}
+# {{Nome do Projeto}}
 
-## Summary
-What this project area does.
+## Resumo
+O que esta área do projeto faz.
 
-## Source
-- Relevant folders
-- Relevant files
-- Relevant docs
+## Fonte
+- Pastas relevantes
+- Arquivos relevantes
+- Documentos relevantes
 
-## Scope
-- In scope
-- Out of scope
+## Escopo
+- Dentro do escopo
+- Fora do escopo
 
-## Responsibilities
-- Responsibility
-- Responsibility
+## Responsabilidades
+- Responsabilidade
+- Responsabilidade
 
-## Current State
-Describe current implementation state.
+## Estado Atual
+Descreva o estado atual da implementação.
 
-## Risks
-- Risk
-- Risk
+## Riscos
+- Risco
+- Risco
 
-## Next Steps
-- [ ] Task
-- [ ] Task
+## Próximos Passos
+- [ ] Tarefa
+- [ ] Tarefa
 
-## Related Notes
-- [[Project Overview]]
-- [[System Architecture]]
-- [[Pending Work Register]]
+## Notas Relacionadas
+- [[Visão Geral do Projeto]]
+- [[Arquitetura do Sistema]]
+- [[Registro de Pendências]]

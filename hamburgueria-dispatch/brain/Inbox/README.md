@@ -1,8 +1,8 @@
-# Inbox
+# Caixa de Entrada
 
-Raw findings, unclassified notes, unclear ideas, temporary captures, and migration leftovers go here first.
+Achados brutos, notas não classificadas, ideias vagas, capturas temporárias e sobras de migração ficam aqui primeiro.
 
-## Rules
-- Keep notes short.
-- Move notes out after classification.
-- Do not keep polished long-term notes here.
+## Regras
+- Mantenha as notas curtas.
+- Mova as notas após classificá-las.
+- Não deixe notas polidas de longo prazo aqui.

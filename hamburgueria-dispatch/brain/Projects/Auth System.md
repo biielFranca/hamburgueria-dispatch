@@ -1,59 +1,59 @@
-# Auth System
+# Sistema de Autenticação
 
-## Summary
-Supabase Auth with a synthetic email convention. Users have usernames, but Supabase requires emails — so the login flow derives an email from the username. Role-based access + granular per-page permissions introduced in v1.
+## Resumo
+Supabase Auth com esquema de e-mail sintético. Usuários têm usernames, mas o Supabase exige e-mails — por isso o fluxo de login deriva um e-mail a partir do username. Controle de acesso por papel + permissões granulares por página introduzidos na v1.
 
-## Source
+## Fonte
 - `hamburgueria-dispatch/src/App.tsx`
 - `hamburgueria-dispatch/src/pages/Login/index.tsx`
 - `hamburgueria-dispatch/src/pages/Users/index.tsx`
 - `.planning/codebase/ARCHITECTURE.md`
 
-## Login Flow
-1. User enters `username` + `password` in Login page
-2. App queries `users` table: `SELECT auth_id FROM users WHERE username = ?`
-3. Constructs email: `{username}@dispatch.internal`
-4. Calls `supabase.auth.signInWithPassword({ email, password })`
-5. `onAuthStateChange` fires in App.tsx with `SIGNED_IN` event
-6. App fetches `role` + `permissions` from `users` table
-7. `localStorage.setItem('dispatch_login_at', Date.now())` — 8-hour expiry tracking
-8. Sidebar and pages render according to role + permissions
+## Fluxo de Login
+1. Usuário digita `username` + `senha` na página de Login
+2. App consulta tabela `users`: `SELECT auth_id FROM users WHERE username = ?`
+3. Constrói e-mail: `{username}@dispatch.internal`
+4. Chama `supabase.auth.signInWithPassword({ email, password })`
+5. `onAuthStateChange` dispara no App.tsx com evento `SIGNED_IN`
+6. App busca `role` + `permissions` da tabela `users`
+7. `localStorage.setItem('dispatch_login_at', Date.now())` — rastreamento de expiração de 8 horas
+8. Sidebar e páginas renderizam de acordo com papel + permissões
 
-## Roles
+## Papéis
 
-| Role | Access |
-|------|--------|
-| `owner` | All pages including Users, Settings |
-| `admin` | All pages except (some) admin functions |
-| `operator` | Operational, Orders, Drivers — limited by permissions |
+| Papel | Acesso |
+|-------|--------|
+| `owner` | Todas as páginas, incluindo Usuários e Configurações |
+| `admin` | Todas as páginas exceto algumas funções admin |
+| `operator` | Operacional, Pedidos, Motoristas — limitado pelas permissões |
 
-## Permissions (granular, v1 addition)
-JSON column on `users` table:
+## Permissões (granulares, adição da v1)
+Coluna JSON na tabela `users`:
 ```json
 { "operational": true, "orders": true, "drivers": true }
 ```
-- Set per-user by owner/admin in Users page
-- App.tsx `hasAccess(page)` function checks role + permissions
-- Sidebar hides buttons for pages user can't access
+- Definidas por usuário pelo owner/admin na página Usuários
+- Função `hasAccess(page)` do App.tsx verifica papel + permissões
+- Sidebar oculta botões de páginas que o usuário não pode acessar
 
-## Session Management
-- 8-hour session: `checkSessionExpiry()` checks `dispatch_login_at` in localStorage
-- `onAuthStateChange` handles `SIGNED_OUT` and `TOKEN_REFRESHED` (without session) → auto-logout
-- Supabase handles JWT refresh internally
+## Gerenciamento de Sessão
+- Sessão de 8 horas: `checkSessionExpiry()` verifica `dispatch_login_at` no localStorage
+- `onAuthStateChange` trata `SIGNED_OUT` e `TOKEN_REFRESHED` (sem sessão) → logout automático
+- Supabase trata o refresh do JWT internamente
 
-## User Creation
-- Users created by owner/admin in Users page
-- Uses `supabaseAdmin` client (requires `VITE_SUPABASE_SERVICE_KEY`)
-- Creates both: Supabase Auth user + `users` table record
-- Email format: `{username}@dispatch.internal`
+## Criação de Usuários
+- Usuários criados pelo owner/admin na página Usuários
+- Usa cliente `supabaseAdmin` (exige `VITE_SUPABASE_SERVICE_KEY`)
+- Cria tanto: usuário no Supabase Auth + registro na tabela `users`
+- Formato de e-mail: `{username}@dispatch.internal`
 
-## Known Issues / Technical Debt
-- Passwords not stored in DB (password_hash column removed ✓)
-- Email convention `@dispatch.internal` = no real email recovery possible
-- Session only tracked via localStorage — multi-tab sync not implemented
-- `VITE_SUPABASE_SERVICE_KEY` is a frontend-accessible secret (high security risk)
+## Problemas Conhecidos / Dívida Técnica
+- Senhas não armazenadas no banco (coluna password_hash removida ✓)
+- Convenção `@dispatch.internal` = impossível recuperar senha por e-mail
+- Sessão rastreada apenas via localStorage — sincronização entre abas não implementada
+- `VITE_SUPABASE_SERVICE_KEY` é um segredo acessível no frontend (alto risco de segurança)
 
-## Related Notes
-- [[Database Schema]]
-- [[Decision Log]]
-- [[Pending Work Register]]
+## Notas Relacionadas
+- [[Schema do Banco de Dados]]
+- [[Registro de Decisões]]
+- [[Registro de Pendências]]

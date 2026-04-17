@@ -1,40 +1,40 @@
-# Main Knowledge Map
+# Mapa de Conhecimento Principal
 
-## Summary
-Main entry point for the Hamburgueria Dispatch knowledge base. This vault documents a Tauri 2 + React + Supabase desktop app for managing food delivery dispatch operations.
+## Resumo
+Ponto de entrada da base de conhecimento do Hamburgueria Dispatch. Este vault documenta um app desktop Tauri 2 + React + Supabase para gerenciamento de despacho de delivery.
 
-## Core Notes
-- [[Project Overview]]
-- [[System Architecture]]
-- [[Decision Log]]
-- [[Pending Work Register]]
+## Notas Principais
+- [[Visão Geral do Projeto]]
+- [[Arquitetura do Sistema]]
+- [[Registro de Decisões]]
+- [[Registro de Pendências]]
 - [[Roadmap]]
-- [[Prompt Library]]
-- [[Terms]]
+- [[Biblioteca de Prompts]]
+- [[Glossário]]
 
-## Architecture
-- [[System Architecture]]
-- [[Data Flow]]
-- [[Database Schema]]
+## Arquitetura
+- [[Arquitetura do Sistema]]
+- [[Fluxo de Dados]]
+- [[Schema do Banco de Dados]]
 
-## Feature Modules
-- [[Classifier]]
-- [[Route Engine]]
-- [[Alert System]]
-- [[iFood Integration]]
-- [[Open Delivery Integration]]
-- [[Auth System]]
+## Módulos
+- [[Classificador]]
+- [[Motor de Rotas]]
+- [[Sistema de Alertas]]
+- [[Integração iFood]]
+- [[Integração Open Delivery]]
+- [[Sistema de Autenticação]]
 
-## Active Review Targets
-- Security concerns: plaintext passwords, service key in frontend
-- Test coverage: zero automated tests across the entire codebase
-- Open Delivery integrations: Keeta, 99Food, Cardápio Web (in development)
+## Em Revisão Ativa
+- Segurança: service key exposta no frontend, credenciais em texto plano no banco
+- Testes: zero testes automatizados em todo o código
+- Integrações Open Delivery: Keeta, 99Food, Cardápio Web (em desenvolvimento)
 
-## Project Status
-All 64 tasks from `tasks_v1.md` completed. v1 shipped. Planning v2.
+## Status do Projeto
+64/64 tarefas da `tasks_v1.md` concluídas. v1 entregue. Planejando v2.
 
-## Related Notes
-- [[Project Overview]]
-- [[System Architecture]]
-- [[Decision Log]]
-- [[Pending Work Register]]
+## Notas Relacionadas
+- [[Visão Geral do Projeto]]
+- [[Arquitetura do Sistema]]
+- [[Registro de Decisões]]
+- [[Registro de Pendências]]

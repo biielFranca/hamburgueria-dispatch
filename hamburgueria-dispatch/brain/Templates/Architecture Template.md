@@ -1,25 +1,25 @@
-# {{Architecture Topic}}
+# {{Tópico de Arquitetura}}
 
-## Summary
-Short explanation of the technical topic.
+## Resumo
+Explicação curta sobre o tópico técnico.
 
-## Source
-- Source area
-- Source area
+## Fonte
+- Área de origem
+- Área de origem
 
-## Structure
-Describe the structure.
+## Estrutura
+Descreva a estrutura.
 
-## Flow
-Describe the operational flow.
+## Fluxo
+Descreva o fluxo operacional.
 
-## Risks
-- Risk
-- Risk
+## Riscos
+- Risco
+- Risco
 
-## Open Questions
-- Question
-- Question
+## Perguntas em Aberto
+- Pergunta
+- Pergunta
 
-## Related Notes
-- [[System Architecture]]
+## Notas Relacionadas
+- [[Arquitetura do Sistema]]

@@ -1,23 +1,23 @@
-# {{Decision Title}}
+# {{Título da Decisão}}
 
 ## Status
-Accepted / Inferred / Superseded / Open
+Aceita / Inferida / Substituída / Em Aberto
 
-## Summary
-Short description of the decision.
+## Resumo
+Descrição curta da decisão.
 
-## Context
-What led to this decision.
+## Contexto
+O que levou a esta decisão.
 
-## Decision
-What was chosen.
+## Decisão
+O que foi escolhido.
 
-## Consequences
-What this affects.
+## Consequências
+O que isso afeta.
 
-## Source
-- File / doc / code area
+## Fonte
+- Arquivo / documento / área do código
 
-## Related Notes
-- [[Decision Log]]
-- [[Project Overview]]
+## Notas Relacionadas
+- [[Registro de Decisões]]
+- [[Visão Geral do Projeto]]

@@ -1,24 +1,24 @@
-# {{Title}}
+# {{Título}}
 
-## Summary
-Short explanation of what this note is about.
+## Resumo
+Explicação curta sobre o que esta nota aborda.
 
-## Source
-- File / folder / code area
-- File / folder / code area
+## Fonte
+- Arquivo / pasta / área do código
+- Arquivo / pasta / área do código
 
-## Details
-Main explanation.
+## Detalhes
+Explicação principal.
 
-## Decisions
-Only if applicable.
+## Decisões
+Apenas se aplicável.
 
-## Open Questions
-Only if applicable.
+## Perguntas em Aberto
+Apenas se aplicável.
 
-## Next Steps
-Only if applicable.
+## Próximos Passos
+Apenas se aplicável.
 
-## Related Notes
-- [[Related Note]]
-- [[Related Note]]
+## Notas Relacionadas
+- [[Nota Relacionada]]
+- [[Nota Relacionada]]

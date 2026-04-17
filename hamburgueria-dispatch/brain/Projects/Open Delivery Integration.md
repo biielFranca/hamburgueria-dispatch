@@ -1,41 +1,41 @@
-# Open Delivery Integration
+# Integração Open Delivery
 
-## Summary
-Integration with platforms that follow the Open Delivery standard: 99Food, Keeta, and Cardápio Web. Library exists (`openDelivery.ts`) but UI is hidden. Keeta orders are special — they always use platform logistics and never enter the dispatch queue.
+## Resumo
+Integração com plataformas que seguem o padrão Open Delivery: 99Food, Keeta e Cardápio Web. A biblioteca existe (`openDelivery.ts`) mas a UI está oculta. Pedidos da Keeta são especiais — sempre usam logística da plataforma e nunca entram na fila de despacho.
 
-## Source
+## Fonte
 - `hamburgueria-dispatch/src/lib/integrations/openDelivery.ts`
 - `tasks_v1.md` — Bloco 6
 - `task-log.md`
 
 ## Status
-**In development — UI hidden.**
-- `openDelivery.ts` exists with full implementation
-- Settings/Connections tab shows iFood only (others disabled in UI)
-- Env vars defined but optional
+**Em desenvolvimento — UI oculta.**
+- `openDelivery.ts` existe com implementação completa
+- Aba Configurações/Conexões exibe apenas iFood (demais desabilitados na UI)
+- Variáveis de ambiente definidas mas opcionais
 
-## Supported Platforms
+## Plataformas Suportadas
 
-| Platform | Protocol | Logistics | Queue Behavior |
-|----------|----------|-----------|----------------|
-| 99Food | Open Delivery | Own (configurable) | Enters dispatch queue |
-| Keeta | Open Delivery | **Platform only** | `external_monitoring` always |
-| Cardápio Web | Open Delivery + webhook | Own | Enters dispatch queue |
+| Plataforma | Protocolo | Logística | Comportamento na Fila |
+|------------|-----------|-----------|----------------------|
+| 99Food | Open Delivery | Própria (configurável) | Entra na fila de despacho |
+| Keeta | Open Delivery | **Apenas da plataforma** | `external_monitoring` sempre |
+| Cardápio Web | Open Delivery + webhook | Própria | Entra na fila de despacho |
 
-## Keeta Special Rule
-Keeta always uses its own delivery staff.
-- Classifier: if `platform = 'keeta'` → `logistics_type = 'platform'` → `route_eligibility = 'external_monitoring'`
-- These orders appear on map for visibility but never enter the dispatch queue
-- This rule is enforced regardless of other order fields
+## Regra Especial da Keeta
+A Keeta sempre usa seus próprios entregadores.
+- Classificador: se `platform = 'keeta'` → `logistics_type = 'platform'` → `route_eligibility = 'external_monitoring'`
+- Esses pedidos aparecem no mapa para visibilidade mas nunca entram na fila de despacho
+- Esta regra é aplicada independente dos outros campos do pedido
 
-## openDelivery.ts — Key Features
-- OAuth 2.0 authentication per platform (one client per platform)
-- Token cache + auto-renewal
-- Order normalization from Open Delivery format → internal `Order` type
-- Platform dispatch confirmation (called when suggestion accepted)
-- Webhook handler: `src/api/webhook/openDelivery.ts` — validates signature, identifies source platform
+## openDelivery.ts — Funcionalidades Principais
+- Autenticação OAuth 2.0 por plataforma (um cliente por plataforma)
+- Cache de token + renovação automática
+- Normalização de payload Open Delivery → tipo interno `Order`
+- Confirmação de despacho pela plataforma (chamada quando sugestão é aceita)
+- Handler de webhook: `src/api/webhook/openDelivery.ts` — valida assinatura, identifica plataforma de origem
 
-## Required Env Vars (when activating)
+## Variáveis de Ambiente Necessárias (ao ativar)
 ```
 VITE_99FOOD_CLIENT_ID / VITE_99FOOD_CLIENT_SECRET
 VITE_KEETA_CLIENT_ID / VITE_KEETA_CLIENT_SECRET
@@ -43,11 +43,11 @@ VITE_CARDAPIOWEB_CLIENT_ID / VITE_CARDAPIOWEB_CLIENT_SECRET
 VITE_CARDAPIOWEB_WEBHOOK_SECRET
 ```
 
-## Error Handling
-- HTTP 5xx or timeout: retry up to 3 times with exponential backoff (same pattern as iFood)
-- 4xx errors: do not retry
+## Tratamento de Erros
+- HTTP 5xx ou timeout: até 3 tentativas com backoff exponencial (mesmo padrão do iFood)
+- Erros 4xx: não tentar novamente
 
-## Related Notes
-- [[iFood Integration]]
-- [[Classifier]]
-- [[Database Schema]]
+## Notas Relacionadas
+- [[Integração iFood]]
+- [[Classificador]]
+- [[Schema do Banco de Dados]]
