@@ -1,0 +1,14 @@
+project_id = "cuvhtdtkuwewslozddfw"
+
+[functions.ifood-sync]
+verify_jwt = false
+
+[functions.open-delivery-sync]
+verify_jwt = false
+
+[functions.open-delivery-webhook]
+verify_jwt = false
+
+[functions.open-delivery-dispatch-confirm]
+verify_jwt = false
+
