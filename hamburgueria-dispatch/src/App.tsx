@@ -8,14 +8,16 @@ import Drivers from './pages/Drivers'
 import UsersPage from './pages/Users'
 import Dev from './pages/Dev'
 import Settings from './pages/Settings'
+import Cardapio from './pages/Cardapio'
+import Estoque from './pages/Estoque'
+import SocialMedia from './pages/SocialMedia'
 import AlertSystem from './components/AlertSystem'
-import IfoodPoller from './components/IfoodPoller'
 import ClassifierService from './components/ClassifierService'
 import RouteEngineService from './components/RouteEngineService'
 import type { Session } from '@supabase/supabase-js'
 import type { UserPermissions, UserRole } from './types'
 
-export type Page = 'operational' | 'orders' | 'drivers' | 'users' | 'dev' | 'settings'
+export type Page = 'operational' | 'orders' | 'drivers' | 'users' | 'dev' | 'settings' | 'cardapio' | 'estoque' | 'social'
 
 const DEFAULT_PERMISSIONS: UserPermissions = { operational: true, orders: true, drivers: true }
 
@@ -90,6 +92,9 @@ export default function App() {
     if (page === 'users'    && !isOwner) return false
     if (page === 'dev'      && userRole !== 'owner') return false
     if (page === 'settings' && userRole !== 'owner') return false
+    if (page === 'cardapio' && !isOwner) return false
+    if (page === 'estoque'  && !isOwner) return false
+    if (page === 'social'   && !isOwner) return false
     // permission-based pages (non-owner operators)
     if (!isOwner) {
       if (page === 'operational' && !permissions.operational) return false
@@ -148,8 +153,10 @@ export default function App() {
         {activePage === 'users'       && hasAccess('users')       && <UsersPage />}
         {activePage === 'dev'         && hasAccess('dev')         && <Dev />}
         {activePage === 'settings'    && hasAccess('settings')    && <Settings />}
+        {activePage === 'cardapio'    && hasAccess('cardapio')    && <Cardapio />}
+        {activePage === 'estoque'     && hasAccess('estoque')     && <Estoque />}
+        {activePage === 'social'      && hasAccess('social')      && <SocialMedia />}
         <AlertSystem />
-        <IfoodPoller />
         <ClassifierService />
         <RouteEngineService />
       </main>

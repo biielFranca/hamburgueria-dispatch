@@ -20,14 +20,16 @@
 .sidebar-logo {
   width: 36px;
   height: 36px;
-  background-color: #ffffff;
-  color: #000000;
-  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  font-size: 18px;
+}
+
+.sidebar-logo-img {
+  width: 36px;
+  height: 36px;
+  display: block;
+  mix-blend-mode: screen;
 }
 
 .sidebar-nav {

@@ -7,10 +7,37 @@ import type { RouteEngineResult } from '../../lib/routeEngine'
 import type { Order } from '../../types'
 import './Dev.css'
 
-const NAMES = ['João Silva', 'Maria Souza', 'Carlos Oliveira', 'Ana Costa', 'Pedro Santos', 'Lucia Ferreira']
-const STREETS = ['Rua das Flores', 'Av. Paulista', 'Rua Oscar Freire', 'Rua Augusta', 'Alameda Santos']
-const HOODS = ['Centro', 'Jardins', 'Vila Madalena', 'Moema', 'Pinheiros']
+const NAMES = ['João Silva', 'Maria Souza', 'Carlos Oliveira', 'Ana Costa', 'Pedro Santos', 'Lucia Ferreira', 'Fernanda Lima', 'Rafael Mendes']
 const PAYMENTS = ['pix', 'credit_card', 'debit_card', 'cash']
+const TEST_PLATFORMS = ['ifood', '99food', 'cardapio_web', 'keeta'] as const
+
+function platformLabel(platform: (typeof TEST_PLATFORMS)[number]) {
+  if (platform === 'ifood') return 'iFood'
+  if (platform === '99food') return '99Food'
+  if (platform === 'cardapio_web') return 'Cardápio Web'
+  return 'Keeta'
+}
+
+const ADDRESSES = [
+  // Vila Nova Cachoeirinha (ao redor da loja)
+  { street: 'Av. Inajar de Souza',              number: '1200', hood: 'Vila Nova Cachoeirinha', zip: '02424-000', lat: -23.4672, lng: -46.6738 },
+  { street: 'Rua Coronel Melo de Oliveira',     number: '540',  hood: 'Vila Nova Cachoeirinha', zip: '02431-020', lat: -23.4698, lng: -46.6712 },
+  { street: 'Rua Domitila',                     number: '87',   hood: 'Vila Nova Cachoeirinha', zip: '02435-010', lat: -23.4654, lng: -46.6755 },
+  { street: 'Rua Nossa Senhora de Fátima',      number: '310',  hood: 'Vila Nova Cachoeirinha', zip: '02438-000', lat: -23.4640, lng: -46.6700 },
+  // Brasilândia (norte, dentro da área visível)
+  { street: 'Rua Deputado Laércio Corte',       number: '420',  hood: 'Brasilândia',            zip: '02850-000', lat: -23.4348, lng: -46.6901 },
+  { street: 'Av. Raimundo Pereira de Magalhães',number: '2000', hood: 'Brasilândia',            zip: '02802-000', lat: -23.4302, lng: -46.6852 },
+  { street: 'Rua Jaguaré',                      number: '740',  hood: 'Brasilândia',            zip: '02860-010', lat: -23.4380, lng: -46.6938 },
+  // Cachoeirinha (oeste, até a linha da Av. Otaviano Alves de Lima)
+  { street: 'Rua Otávio Tarquínio de Sousa',    number: '180',  hood: 'Cachoeirinha',           zip: '02442-000', lat: -23.4710, lng: -46.6831 },
+  { street: 'Av. Otaviano Alves de Lima',       number: '950',  hood: 'Cachoeirinha',           zip: '02450-000', lat: -23.4680, lng: -46.6870 },
+  // Mandaqui (leste)
+  { street: 'Av. Mandaqui',                     number: '630',  hood: 'Mandaqui',               zip: '02401-000', lat: -23.4685, lng: -46.6228 },
+  { street: 'Rua Voluntários da Pátria',        number: '4200', hood: 'Mandaqui',               zip: '02402-000', lat: -23.4660, lng: -46.6255 },
+  // Casa Verde / Limão (sul, acima do Tietê)
+  { street: 'Av. Casa Verde',                   number: '1540', hood: 'Casa Verde',             zip: '02519-001', lat: -23.5028, lng: -46.6643 },
+  { street: 'Rua Camargo',                      number: '210',  hood: 'Limão',                  zip: '02525-010', lat: -23.4971, lng: -46.6498 },
+]
 
 const ITEM_SETS = [
   [{ name: 'X-Burguer', quantity: 1, unit_price: 32.9, total_price: 32.9 }, { name: 'Fritas M', quantity: 1, unit_price: 12, total_price: 12 }],
@@ -23,30 +50,47 @@ const ITEM_SETS = [
   [{ name: 'Smash Duplo', quantity: 1, unit_price: 52, total_price: 52 }, { name: 'Milkshake', quantity: 1, unit_price: 22, total_price: 22 }],
 ]
 
-function pick<T>(arr: T[]): T {
+function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
+}
+
+function newId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 function mockOrder(storeId: string, type: 'own' | 'platform' | 'pickup', prepMinutes = 20) {
   const isTakeout = type === 'pickup'
   const isOwn = type === 'own'
+  const platform = pick(TEST_PLATFORMS)
   const items = pick(ITEM_SETS)
   const total = items.reduce((s, i) => s + i.total_price, 0)
 
   return {
     store_id: storeId,
-    platform: 'ifood',
-    platform_order_id: `test-${crypto.randomUUID()}`,
+    platform,
+    platform_order_id: `test-${newId()}`,
     platform_order_code: `#${Math.floor(Math.random() * 9000 + 1000)}`,
     customer_name: pick(NAMES),
     customer_phone: `119${Math.floor(Math.random() * 90_000_000 + 10_000_000)}`,
-    address_street: isTakeout ? '' : pick(STREETS),
-    address_number: isTakeout ? null : String(Math.floor(Math.random() * 999 + 1)),
-    address_neighborhood: isTakeout ? null : pick(HOODS),
-    address_city: isTakeout ? null : 'São Paulo',
-    address_zip: isTakeout ? null : '01310-100',
-    latitude: isTakeout ? null : -23.5505 + (Math.random() - 0.5) * 0.05,
-    longitude: isTakeout ? null : -46.6333 + (Math.random() - 0.5) * 0.05,
+    ...(() => {
+      if (isTakeout) return {
+        address_street: '', address_number: null, address_neighborhood: null,
+        address_city: null, address_zip: null, latitude: null, longitude: null,
+      }
+      const addr = pick(ADDRESSES)
+      return {
+        address_street:       addr.street,
+        address_number:       addr.number,
+        address_neighborhood: addr.hood,
+        address_city:         'São Paulo',
+        address_zip:          addr.zip,
+        latitude:             addr.lat + (Math.random() - 0.5) * 0.002,
+        longitude:            addr.lng + (Math.random() - 0.5) * 0.002,
+      }
+    })(),
     items,
     total_amount: total,
     payment_method: pick(PAYMENTS),
@@ -125,7 +169,7 @@ export default function Dev() {
   const SOLO_WAIT = Number(import.meta.env.VITE_SOLO_WAIT_MIN ?? 10)
 
   function addLog(level: LogLevel, msg: string) {
-    setLog(prev => [{ id: crypto.randomUUID(), ts: new Date(), level, msg }, ...prev].slice(0, MAX_LOG))
+    setLog(prev => [{ id: newId(), ts: new Date(), level, msg }, ...prev].slice(0, MAX_LOG))
   }
 
   async function refreshStats(sid?: string) {
@@ -273,19 +317,24 @@ export default function Dev() {
       return
     }
     set({ state: 'loading', msg: '' })
-    const payload = mockOrder(storeIdRef.current, type, prepMin)
-    const { error } = await supabase.from('orders').insert(payload)
-    if (error) {
-      set({ state: 'error', msg: error.message })
-    } else {
-      const label =
-        type === 'own'
-          ? `${payload.platform_order_code} - entrega própria -> classificador`
-          : type === 'platform'
-          ? `${payload.platform_order_code} - entrega plataforma -> monitoramento`
-          : `${payload.platform_order_code} - retirada`
-      set({ state: 'ok', msg: label })
-      refreshCount()
+    try {
+      const payload = mockOrder(storeIdRef.current, type, prepMin)
+      const { error } = await supabase.from('orders').insert(payload)
+      if (error) {
+        set({ state: 'error', msg: error.message })
+      } else {
+        const pLabel = platformLabel(payload.platform)
+        const label =
+          type === 'own'
+            ? `${payload.platform_order_code} - ${pLabel} - entrega própria -> classificador`
+            : type === 'platform'
+            ? `${payload.platform_order_code} - ${pLabel} - entrega plataforma -> monitoramento`
+            : `${payload.platform_order_code} - ${pLabel} - retirada`
+        set({ state: 'ok', msg: label })
+        refreshCount()
+      }
+    } catch (e) {
+      set({ state: 'error', msg: e instanceof Error ? e.message : String(e) })
     }
     setTimeout(() => set(IDLE), 4000)
   }
@@ -418,7 +467,7 @@ export default function Dev() {
       </div>
 
       <section className="dev-section">
-        <div className="dev-section-title">Simular pedido iFood</div>
+        <div className="dev-section-title">Simular pedido (multiplataforma)</div>
         <div className="dev-section-desc">
           Insere um pedido fake diretamente no banco com dados aleatórios.
           <br />

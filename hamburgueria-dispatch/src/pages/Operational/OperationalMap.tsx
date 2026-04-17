@@ -11,10 +11,11 @@ export const DISPATCH_GHOST_MS = 60_000
 // ── Order map state type ──────────────────────────────────────────────────────
 
 export type OrderMarkerState = {
-  platformColor: string  // brand color — border when outline, fill when filled
-  opacity:       number
-  label:         string  // stop number for selected suggestion
-  filled:        boolean // true → fill balloon; false → dark bg + colored border
+  borderColor: string
+  fillColor:   string
+  opacity:     number
+  label:       string
+  dashed?:     boolean
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -24,6 +25,10 @@ function isLight(hex: string): boolean {
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)
   return (r * 299 + g * 587 + b * 114) / 1000 > 160
+}
+
+function isHexColor(color: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(color)
 }
 
 // ── Icon factories ────────────────────────────────────────────────────────────
@@ -47,21 +52,24 @@ function storeIcon(): L.DivIcon {
 /**
  * Speech-bubble marker.
  * Shape: rounded-rect body + downward triangle tail.
- * - filled=false → dark bg (#171717), platformColor border + text
- * - filled=true  → platformColor bg, white (or black) text
+ * - border color represents the platform
+ * - middle black ring separates platform border from inner fill
+ * - fill color represents the current map status
  * - label overrides the order code when set (stop number)
  */
 function orderIcon(
-  code:          string,
-  platformColor: string,
-  filled:        boolean,
-  label:         string,
-  opacity:       number,
+  code:        string,
+  borderColor: string,
+  fillColor:   string,
+  label:       string,
+  opacity:     number,
+  dashed = false,
 ): L.DivIcon {
-  const bg     = filled ? platformColor : '#171717'
-  const border = platformColor
-  const text   = filled ? (isLight(platformColor) ? '#000' : '#fff') : platformColor
+  const bg     = fillColor
+  const border = borderColor
+  const text   = isHexColor(fillColor) && isLight(fillColor) ? '#0b0b0b' : '#ffffff'
   const display = label || code
+  const outerBorderCss = dashed ? `2px dashed ${border}` : `2.5px solid ${border}`
 
   return L.divIcon({
     className: '',
@@ -69,26 +77,41 @@ function orderIcon(
       <div style="position:relative;display:inline-block;opacity:${opacity};">
         <div style="
           width:50px;height:26px;
-          background:${bg};
-          border:2.5px solid ${border};
+          border:${outerBorderCss};
           border-radius:6px;
-          display:flex;align-items:center;justify-content:center;
-          font-size:10px;font-weight:800;color:${text};
-          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+          background:transparent;
+          padding:1px;
           box-shadow:0 2px 8px rgba(0,0,0,.65);
-          white-space:nowrap;overflow:hidden;
-          box-sizing:border-box;letter-spacing:-.2px;
-        ">${display}</div>
+          box-sizing:border-box;
+        ">
+          <div style="
+            width:100%;height:100%;
+            border:1px solid #000;
+            border-radius:4px;
+            background:${bg};
+            display:flex;align-items:center;justify-content:center;
+            font-size:10px;font-weight:800;color:${text};
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+            white-space:nowrap;overflow:hidden;
+            box-sizing:border-box;letter-spacing:-.2px;
+          ">${display}</div>
+        </div>
         <div style="
-          position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);
+          position:absolute;bottom:-9px;left:50%;transform:translateX(-50%);
           width:0;height:0;
-          border-left:6px solid transparent;border-right:6px solid transparent;
-          border-top:9px solid ${border};
+          border-left:7px solid transparent;border-right:7px solid transparent;
+          border-top:10px solid ${border};
         "></div>
         <div style="
-          position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);
+          position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);
           width:0;height:0;
-          border-left:4px solid transparent;border-right:4px solid transparent;
+          border-left:6px solid transparent;border-right:6px solid transparent;
+          border-top:8px solid #000;
+        "></div>
+        <div style="
+          position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);
+          width:0;height:0;
+          border-left:5px solid transparent;border-right:5px solid transparent;
           border-top:6px solid ${bg};
         "></div>
       </div>`,
@@ -115,14 +138,33 @@ function FitBoundsOnce({ positions }: { positions: [number, number][] }) {
   return null
 }
 
+// ── Pan to coord ──────────────────────────────────────────────────────────────
+
+function PanTo({ coord }: { coord: [number, number] | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!coord) return
+    map.flyTo(coord, Math.max(map.getZoom(), 15), { animate: true, duration: 0.6 })
+  }, [coord?.[0], coord?.[1]]) // eslint-disable-line
+  return null
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
+export interface HighlightFinalized {
+  coord:         [number, number]
+  code:          string
+  platformColor: string
+}
+
 export interface OperationalMapProps {
-  store:              Store | null
-  orders:             Order[]
-  markerStates:       Map<string, OrderMarkerState>
-  routeCoords:        [number, number][]
-  onOrderCtrlClick?:  (orderId: string) => void
+  store:               Store | null
+  orders:              Order[]
+  markerStates:        Map<string, OrderMarkerState>
+  routeCoords:         [number, number][]
+  onOrderCtrlClick?:   (orderId: string) => void
+  driverHighlightMarkers?: HighlightFinalized[]
+  highlightFinalized?: HighlightFinalized | null
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -133,6 +175,8 @@ export default function OperationalMap({
   markerStates,
   routeCoords,
   onOrderCtrlClick,
+  driverHighlightMarkers = [],
+  highlightFinalized,
 }: OperationalMapProps) {
   const defaultCenter: [number, number] = [-23.55052, -46.633308]
   const center: [number, number] =
@@ -183,10 +227,11 @@ export default function OperationalMap({
         .filter(o => o.latitude != null && o.longitude != null)
         .map(order => {
           const state = markerStates.get(order.id) ?? {
-            platformColor: '#666677',
+            borderColor: '#666677',
+            fillColor: '#555566',
             opacity: 1,
             label: '',
-            filled: false,
+            dashed: false,
           }
           return (
             <Marker
@@ -194,10 +239,11 @@ export default function OperationalMap({
               position={[order.latitude!, order.longitude!]}
               icon={orderIcon(
                 order.platform_order_code ?? '#???',
-                state.platformColor,
-                state.filled,
+                state.borderColor,
+                state.fillColor,
                 state.label,
                 state.opacity,
+                state.dashed ?? false,
               )}
               zIndexOffset={state.label ? 500 : 0}
               eventHandlers={{
@@ -211,7 +257,25 @@ export default function OperationalMap({
           )
         })}
 
+      {highlightFinalized && (
+        <Marker
+          position={highlightFinalized.coord}
+          icon={orderIcon(highlightFinalized.code, highlightFinalized.platformColor, highlightFinalized.platformColor, '', 1)}
+          zIndexOffset={900}
+        />
+      )}
+
+      {driverHighlightMarkers.map((entry) => (
+        <Marker
+          key={`driver-highlight-${entry.code}-${entry.coord[0]}-${entry.coord[1]}`}
+          position={entry.coord}
+          icon={orderIcon(entry.code, entry.platformColor, '#22d3ee', '', 1)}
+          zIndexOffset={650}
+        />
+      ))}
+
       <FitBoundsOnce positions={allPositions} />
+      <PanTo coord={highlightFinalized?.coord ?? null} />
     </MapContainer>
   )
 }

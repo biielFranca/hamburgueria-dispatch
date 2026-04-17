@@ -4,7 +4,10 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { supabase } from '../../lib/supabase'
 import { syncIfood } from '../../lib/ifood'
+import { pollOpenDeliveryEvents } from '../../lib/integrations/openDelivery'
 import { fetchAddressByCep } from '../../lib/cep'
+import IfoodPoller from '../../components/IfoodPoller'
+import OpenDeliveryPoller from '../../components/OpenDeliveryPoller'
 import type { Store } from '../../types'
 import './Settings.css'
 
@@ -39,24 +42,36 @@ const PLATFORM_DEFS = [
     key: 'keeta',
     label: 'Keeta',
     color: '#27AE60',
-    description: 'Em breve',
-    disabled: true,
+    description: 'Recebe pedidos via Open Delivery. Logistics sempre gerenciada pela Keeta.',
+    disabled: false,
   },
   {
     key: '99food',
     label: '99Food',
     color: '#F5A623',
-    description: 'Em breve',
-    disabled: true,
+    description: 'Recebe pedidos via Open Delivery com suporte a logística própria.',
+    disabled: false,
   },
   {
     key: 'cardapio_web',
     label: 'Cardápio Web',
     color: '#8B5CF6',
-    description: 'Em breve',
-    disabled: true,
+    description: 'Recebe pedidos do Cardápio Web via Open Delivery.',
+    disabled: false,
   },
 ]
+
+const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024
+const LOGO_ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(new Error('Nao foi possivel ler o arquivo selecionado.'))
+    reader.readAsDataURL(file)
+  })
+}
 
 function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
   useMapEvents({
@@ -130,8 +145,13 @@ function IntegrationCard({
     setTestResult(null)
 
     try {
-      const result = await syncIfood(storeId)
-      setTestResult(`✓ Sync ok - ${result.events} evento(s), ${result.inserted} inserido(s)`)
+      if (def.key === 'ifood') {
+        const result = await syncIfood(storeId)
+        setTestResult(`✓ Sync ok — ${result.events} evento(s), ${result.inserted} inserido(s)`)
+      } else {
+        await pollOpenDeliveryEvents(def.key as '99food' | 'keeta' | 'cardapio_web', storeId, clientId.trim())
+        setTestResult(`✓ Conexão ok — ${def.label} respondeu com sucesso`)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -238,10 +258,13 @@ function TabGeneral({ storeId }: { storeId: string }) {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const [cepLoading, setCepLoading] = useState(false)
   const [cepError, setCepError] = useState<string | null>(null)
+  const [geocodeLoading, setGeocodeLoading] = useState(false)
 
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoUploading, setLogoUploading] = useState(false)
   const [cep, setCep] = useState('')
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
@@ -250,7 +273,7 @@ function TabGeneral({ storeId }: { storeId: string }) {
     async function load() {
       const { data: storeData } = await supabase
         .from('stores')
-        .select('id,name,address,phone,latitude,longitude,active,created_at')
+        .select('id,name,address,phone,logo_url,latitude,longitude,active,created_at')
         .eq('id', storeId)
         .single()
       if (storeData) {
@@ -258,6 +281,7 @@ function TabGeneral({ storeId }: { storeId: string }) {
         setName(s.name ?? '')
         setAddress(s.address ?? '')
         setPhone(s.phone ?? '')
+        setLogoUrl(s.logo_url ?? '')
         setLat(s.latitude != null ? String(s.latitude) : '')
         setLng(s.longitude != null ? String(s.longitude) : '')
       }
@@ -271,6 +295,18 @@ function TabGeneral({ storeId }: { storeId: string }) {
     setLng(longitude.toFixed(7))
   }
 
+  async function nominatimGeocode(query: string): Promise<{ lat: string; lon: string } | null> {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`,
+        { headers: { 'Accept': 'application/json' } },
+      )
+      const data = await res.json()
+      if (data?.[0]?.lat && data?.[0]?.lon) return { lat: data[0].lat, lon: data[0].lon }
+    } catch { /* ignore */ }
+    return null
+  }
+
   async function handleCepChange(raw: string) {
     setCep(raw)
     setCepError(null)
@@ -279,11 +315,71 @@ function TabGeneral({ storeId }: { storeId: string }) {
     setCepLoading(true)
     try {
       const result = await fetchAddressByCep(digits)
-      setAddress(`${result.street}, ${result.neighborhood}, ${result.city} - ${result.state}`)
+      const fullAddress = `${result.street}, ${result.neighborhood}, ${result.city} - ${result.state}`
+      setAddress(fullAddress)
+      // Geocode via Nominatim using the CEP
+      const geo = await nominatimGeocode(`${digits}, Brasil`)
+      if (geo) {
+        setLat(parseFloat(geo.lat).toFixed(7))
+        setLng(parseFloat(geo.lon).toFixed(7))
+      }
     } catch (e) {
       setCepError(e instanceof Error ? e.message : 'CEP inválido')
     }
     setCepLoading(false)
+  }
+
+  async function handleLogoChange(file: File | null) {
+    if (!file) return
+
+    const hasValidExtension = /\.(png|jpe?g|webp|svg)$/i.test(file.name)
+    const isAllowedType = LOGO_ALLOWED_TYPES.includes(file.type) || hasValidExtension
+
+    if (!isAllowedType) {
+      setFeedback({ type: 'error', msg: 'Formato invalido. Use PNG, JPG, WEBP ou SVG.' })
+      return
+    }
+
+    if (file.size > MAX_LOGO_SIZE_BYTES) {
+      setFeedback({ type: 'error', msg: 'A logo deve ter no maximo 2MB.' })
+      return
+    }
+
+    setLogoUploading(true)
+    setFeedback(null)
+
+    try {
+      const dataUrl = await fileToDataUrl(file)
+      if (!dataUrl) throw new Error('Arquivo vazio')
+      setLogoUrl(dataUrl)
+      setFeedback({ type: 'success', msg: 'Logo carregada. Clique em Salvar configuracoes para aplicar.' })
+      setTimeout(() => setFeedback(null), 3500)
+    } catch {
+      setFeedback({ type: 'error', msg: 'Nao foi possivel carregar a imagem da logo.' })
+    } finally {
+      setLogoUploading(false)
+    }
+  }
+
+  function handleLogoRemove() {
+    setLogoUrl('')
+    setFeedback({ type: 'success', msg: 'Logo removida. Clique em Salvar configuracoes para aplicar.' })
+    setTimeout(() => setFeedback(null), 3500)
+  }
+
+  async function handleGeocode() {
+    const query = address.trim() || cep.trim()
+    if (!query) return
+    setGeocodeLoading(true)
+    const geo = await nominatimGeocode(`${query}, Brasil`)
+    setGeocodeLoading(false)
+    if (geo) {
+      setLat(parseFloat(geo.lat).toFixed(7))
+      setLng(parseFloat(geo.lon).toFixed(7))
+    } else {
+      setFeedback({ type: 'error', msg: 'Endereço não encontrado. Tente ajustar o endereço ou posicionar o pin no mapa.' })
+      setTimeout(() => setFeedback(null), 5000)
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -308,20 +404,37 @@ function TabGeneral({ storeId }: { storeId: string }) {
 
     setSaving(true)
     setFeedback(null)
-    const { error } = await supabase
+    const basePayload = {
+      name: name.trim(),
+      address: address.trim(),
+      phone: cleanPhone || null,
+      latitude: parsedLat,
+      longitude: parsedLng,
+    }
+
+    let logoColumnMissing = false
+    let { error } = await supabase
       .from('stores')
       .update({
-        name: name.trim(),
-        address: address.trim(),
-        phone: cleanPhone || null,
-        latitude: parsedLat,
-        longitude: parsedLng,
+        ...basePayload,
+        logo_url: logoUrl || null,
       })
       .eq('id', storeId)
+
+    if (error && /logo_url/i.test(error.message ?? '')) {
+      logoColumnMissing = true
+      const fallback = await supabase.from('stores').update(basePayload).eq('id', storeId)
+      error = fallback.error
+    }
     setSaving(false)
 
     if (error) {
       setFeedback({ type: 'error', msg: `Erro ao salvar: ${error.message}` })
+      return
+    }
+
+    if (logoColumnMissing) {
+      setFeedback({ type: 'error', msg: 'Dados salvos, mas o banco ainda não possui a coluna logo_url.' })
       return
     }
 
@@ -343,6 +456,44 @@ function TabGeneral({ storeId }: { storeId: string }) {
   return (
     <div className="settings-body">
       <form className="settings-form" onSubmit={handleSave}>
+        <div className="settings-field">
+          <label>Logo da loja</label>
+          <div className="settings-logo-editor">
+            <div className="settings-logo-preview-wrap">
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo da loja" className="settings-logo-preview" />
+              ) : (
+                <span className="settings-logo-placeholder">Sem logo</span>
+              )}
+            </div>
+            <div className="settings-logo-actions">
+              <label className={`settings-logo-upload-btn ${logoUploading ? 'is-loading' : ''}`}>
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+                  disabled={logoUploading || saving}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0] ?? null
+                    await handleLogoChange(file)
+                    e.currentTarget.value = ''
+                  }}
+                />
+                {logoUploading ? 'Carregando...' : 'Subir imagem'}
+              </label>
+              {logoUrl && (
+                <button
+                  type="button"
+                  className="settings-logo-remove-btn"
+                  onClick={handleLogoRemove}
+                  disabled={saving || logoUploading}
+                >
+                  Remover
+                </button>
+              )}
+              <span className="settings-logo-hint">PNG, JPG, WEBP ou SVG até 2MB.</span>
+            </div>
+          </div>
+        </div>
         <div className="settings-field">
           <label htmlFor="store-name">Nome da loja</label>
           <input id="store-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Nome da loja" required />
@@ -371,10 +522,18 @@ function TabGeneral({ storeId }: { storeId: string }) {
             <input id="store-lng" type="text" value={lng} onChange={e => setLng(e.target.value)} placeholder="-46.6333" />
           </div>
         </div>
-        <p className="settings-map-hint">Clique no mapa para posicionar o pin e preencher latitude/longitude automaticamente.</p>
+        <button
+          type="button"
+          className="settings-geocode-btn"
+          onClick={handleGeocode}
+          disabled={geocodeLoading || (!address.trim() && !cep.trim())}
+        >
+          {geocodeLoading ? 'Buscando...' : 'Geocodificar pelo endereço'}
+        </button>
+        <p className="settings-map-hint">O CEP preenche o endereço e geocodifica automaticamente. Você também pode clicar no mapa ou usar o botão acima.</p>
         {feedback && <div className={`settings-feedback ${feedback.type}`}>{feedback.msg}</div>}
-        <button type="submit" className="settings-save-btn" disabled={saving}>
-          {saving ? 'Salvando...' : 'Salvar configurações'}
+        <button type="submit" className="settings-save-btn" disabled={saving || logoUploading}>
+          {saving ? 'Salvando...' : logoUploading ? 'Carregando logo...' : 'Salvar configurações'}
         </button>
       </form>
 
@@ -433,6 +592,8 @@ function TabConnections({ storeId }: { storeId: string }) {
           )
         })}
       </div>
+      <IfoodPoller />
+      <OpenDeliveryPoller />
     </div>
   )
 }

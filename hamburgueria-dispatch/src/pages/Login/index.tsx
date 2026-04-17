@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import deliveryDispatchLogo from '../../assets/branding/delivery-dispatch-logo-full.png'
 import './Login.css'
 
 export default function Login({ sessionExpired = false }: { sessionExpired?: boolean }) {
@@ -47,8 +48,7 @@ export default function Login({ sessionExpired = false }: { sessionExpired?: boo
   return (
     <div className="login-container">
       <div className="login-box">
-        <h1 className="login-title">Dispatch</h1>
-        <p className="login-subtitle">Central de despacho</p>
+        <img src={deliveryDispatchLogo} alt="Delivery Dispatch" className="login-logo" />
 
         <div className="login-form">
           <div className="login-field">

@@ -5,7 +5,7 @@ import { confirmOpenDeliveryDispatch } from '../../lib/integrations/openDelivery
 import { fetchRouteGeometry, findOptimalSequence } from '../../lib/routeEngine'
 import type { Driver, Order, Platform, Store } from '../../types'
 import OperationalMap, { DISPATCH_GHOST_MS } from './OperationalMap'
-import type { OrderMarkerState } from './OperationalMap'
+import type { HighlightFinalized, OrderMarkerState } from './OperationalMap'
 import './Operational.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -16,6 +16,15 @@ const PLATFORM_COLORS: Record<Platform, string> = {
   '99food':     '#F5A623',
   cardapio_web: '#8B5CF6',
 }
+
+const MARKER_STATUS_COLORS = {
+  outsideSuggestion:  'rgba(148, 163, 184, 0.38)',
+  pendingSuggestion:  'rgba(96, 165, 250, 0.42)',
+  selectedSuggestion: 'rgba(250, 204, 21, 0.5)',
+  recentlyDispatched: 'rgba(74, 222, 128, 0.42)',
+  ghost:              'rgba(255, 255, 255, 0.14)',
+  driverFocus:        '#22d3ee',
+} as const
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -44,12 +53,20 @@ interface InProgressEntry {
 interface FinalizedEntry {
   id: string
   code: string
+  driverId: string | null
   customerName: string
   driverName: string | null
   status: string
   totalAmount: number
   platform: Platform
   dispatchedAt: string | null
+  latitude: number | null
+  longitude: number | null
+  addressStreet:       string | null
+  addressNumber:       string | null
+  addressNeighborhood: string | null
+  addressCity:         string | null
+  addressZip:          string | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -131,14 +148,15 @@ function SuggestionBlock({
           <span className="sug-version">v{suggestion.suggestion_version}</span>
         </div>
         <div className="sug-header-right">
-          {suggestion.predicted_eta != null && (
-            <span className="sug-eta">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-              {suggestion.predicted_eta} min
-            </span>
-          )}
+          <span className="sug-eta">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            {suggestion.predicted_eta != null
+              ? `${suggestion.predicted_eta} min`
+              : `~${suggestion.orders.length * 15} min`
+            }
+          </span>
           <span className="sug-stops-badge">
             {suggestion.orders.length} {suggestion.orders.length === 1 ? 'parada' : 'paradas'}
           </span>
@@ -241,16 +259,23 @@ export default function Operational() {
   const [orders, setOrders]               = useState<Order[]>([])
   const [suggestions, setSuggestions]     = useState<SuggestionRow[]>([])
   const [drivers, setDrivers]             = useState<Driver[]>([])
-  const [selectedSuggId, setSelectedSuggId] = useState<string | null>(null)
-  const [activeTab, setActiveTab]         = useState<'suggestions' | 'inprogress' | 'finalized'>('suggestions')
+  const [selectedSuggId, setSelectedSuggId]           = useState<string | null>(null)
+  const [selectedFinalizedId, setSelectedFinalizedId] = useState<string | null>(null)
+  const [geocodingId, setGeocodingId]                 = useState<string | null>(null)
+  const [geocodedCoords, setGeocodedCoords]           = useState<Record<string, [number, number]>>({})
+  const [activeTab, setActiveTab]                     = useState<'suggestions' | 'inprogress' | 'finalized'>('suggestions')
   const [finalized, setFinalized]         = useState<FinalizedEntry[]>([])
   const [driverSelections, setDriverSelections] = useState<Record<string, string>>({})
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null)
+  const [driverFilterOpen, setDriverFilterOpen] = useState(false)
+  const [orderDriverMap, setOrderDriverMap] = useState<Record<string, string>>({})
   const [inProgress, setInProgress]       = useState<InProgressEntry[]>([])
   const [loadingAction, setLoadingAction] = useState<string | null>(null) // suggestionId being acted upon
   const [editingSuggId, setEditingSuggId] = useState<string | null>(null)
   const [loading, setLoading]             = useState(true)
   const [popupOrderId, setPopupOrderId]   = useState<string | null>(null)
   const storeIdRef                        = useRef<string | null>(null)
+  const driverFilterRef                   = useRef<HTMLDivElement | null>(null)
   const [tick, setTick]                   = useState(0)
 
   // Tick every second for countdown + ghost cleanup
@@ -267,6 +292,19 @@ export default function Operational() {
       setInProgress(prev => prev.filter(e => Date.now() - e.dispatchedAt < DISPATCH_GHOST_MS))
     }
   }, [tick]) // eslint-disable-line
+
+  useEffect(() => {
+    if (!driverFilterOpen) return
+    function handleOutsideClick(e: MouseEvent) {
+      const target = e.target as Node | null
+      if (!target) return
+      if (driverFilterRef.current && !driverFilterRef.current.contains(target)) {
+        setDriverFilterOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [driverFilterOpen])
 
   // ── Data fetching ───────────────────────────────────────────────────────────
 
@@ -322,41 +360,48 @@ export default function Operational() {
         .filter(Boolean) as Order[],
     }))
 
-    // ── Finalized orders: join driver names ─────────────────────────────────
+    // ── Driver by order map (for finalized list + map highlight) ───────────
     const finalizedOrders = (finalizedRes.data ?? []) as Order[]
-    const driverByOrderId: Record<string, string> = {}
+    const allRelevantOrderIds = [
+      ...new Set([...fetchedOrders, ...finalizedOrders].map(o => o.id)),
+    ]
+    const driverIdByOrderId: Record<string, string> = {}
+    const driverNameByOrderId: Record<string, string> = {}
 
-    if (finalizedOrders.length > 0) {
-      const finalizedIds = finalizedOrders.map(o => o.id)
-
+    if (allRelevantOrderIds.length > 0) {
       const { data: suggLinks } = await supabase
         .from('dispatch_suggestion_orders')
         .select('order_id, suggestion_id')
-        .in('order_id', finalizedIds)
+        .in('order_id', allRelevantOrderIds)
 
       if (suggLinks?.length) {
         const suggIds = [...new Set(suggLinks.map(l => l.suggestion_id as string))]
-
         const { data: dispatched } = await supabase
           .from('dispatch_suggestions')
           .select('id, assigned_driver_id')
           .in('id', suggIds)
           .not('assigned_driver_id', 'is', null)
 
+        const suggToDriver = new Map((dispatched ?? []).map(s => [s.id, s.assigned_driver_id as string]))
         const allDriverIds = [...new Set((dispatched ?? []).map(s => s.assigned_driver_id as string))]
         const driverNameMap = new Map<string, string>()
 
         if (allDriverIds.length > 0) {
           const { data: driverRows } = await supabase
-            .from('drivers').select('id, name').in('id', allDriverIds)
-          for (const d of (driverRows ?? [])) driverNameMap.set(d.id, d.name)
+            .from('drivers')
+            .select('id, name')
+            .in('id', allDriverIds)
+          for (const d of (driverRows ?? [])) {
+            driverNameMap.set(d.id, d.name)
+          }
         }
 
-        const suggToDriver = new Map((dispatched ?? []).map(s => [s.id, s.assigned_driver_id as string]))
         for (const link of suggLinks) {
           const driverId = suggToDriver.get(link.suggestion_id)
-          if (driverId && driverNameMap.has(driverId)) {
-            driverByOrderId[link.order_id] = driverNameMap.get(driverId)!
+          if (!driverId) continue
+          driverIdByOrderId[link.order_id] = driverId
+          if (driverNameMap.has(driverId)) {
+            driverNameByOrderId[link.order_id] = driverNameMap.get(driverId)!
           }
         }
       }
@@ -365,20 +410,73 @@ export default function Operational() {
     const finalizedEntries: FinalizedEntry[] = finalizedOrders.map(o => ({
       id:          o.id,
       code:        o.platform_order_code ?? `#${o.id.slice(0, 6).toUpperCase()}`,
+      driverId:    driverIdByOrderId[o.id] ?? null,
       customerName: o.customer_name,
-      driverName:  driverByOrderId[o.id] ?? null,
+      driverName:  driverNameByOrderId[o.id] ?? null,
       status:      o.status,
       totalAmount: o.total_amount,
       platform:    o.platform,
       dispatchedAt: o.dispatched_at ?? null,
+      latitude:    o.latitude ?? null,
+      longitude:   o.longitude ?? null,
+      addressStreet:       o.address_street ?? null,
+      addressNumber:       o.address_number ?? null,
+      addressNeighborhood: o.address_neighborhood ?? null,
+      addressCity:         o.address_city ?? null,
+      addressZip:          o.address_zip ?? null,
     }))
 
     setStore((storeRes.data ?? null) as Store | null)
     setDrivers((driversRes.data ?? []) as Driver[])
     setOrders(fetchedOrders)
     setSuggestions(enriched)
+    setOrderDriverMap(driverIdByOrderId)
     setFinalized(finalizedEntries)
     setLoading(false)
+  }
+
+  async function geocodeEntry(entry: FinalizedEntry): Promise<[number, number] | null> {
+    const queries: string[] = []
+    if (entry.addressZip) {
+      queries.push(`${entry.addressZip}, Brasil`)
+    }
+    const parts = [entry.addressStreet, entry.addressNumber, entry.addressNeighborhood, entry.addressCity]
+      .filter(Boolean)
+    if (parts.length >= 2) {
+      queries.push(`${parts.join(', ')}, Brasil`)
+    }
+    for (const q of queries) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=br`,
+          { headers: { 'Accept': 'application/json' } },
+        )
+        const data = await res.json()
+        if (data?.[0]?.lat && data?.[0]?.lon) {
+          return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
+        }
+      } catch { /* try next query */ }
+    }
+    return null
+  }
+
+  async function handleFinalizedClick(entry: FinalizedEntry) {
+    if (selectedFinalizedId === entry.id) {
+      setSelectedFinalizedId(null)
+      return
+    }
+    const cached = geocodedCoords[entry.id]
+    if ((entry.latitude != null && entry.longitude != null) || cached) {
+      setSelectedFinalizedId(entry.id)
+      return
+    }
+    setGeocodingId(entry.id)
+    const coord = await geocodeEntry(entry)
+    setGeocodingId(null)
+    if (coord) {
+      setGeocodedCoords(prev => ({ ...prev, [entry.id]: coord }))
+      setSelectedFinalizedId(entry.id)
+    }
   }
 
   useEffect(() => {
@@ -523,11 +621,25 @@ export default function Operational() {
         .in('id', newSequence.map(o => o.id))
     }
 
-    // Update the suggestion with new sequence and bump version
+    // Recalculate ETA via OSRM for the new sequence
+    let newEta: number | null = null
+    const storeCoord = store?.latitude != null && store?.longitude != null
+      ? [store.latitude, store.longitude] as [number, number]
+      : null
+    if (storeCoord && newSequence.every(o => o.latitude != null && o.longitude != null)) {
+      try {
+        const { durationSeconds } = await findOptimalSequence(storeCoord, newSequence)
+        newEta = durationSeconds ? Math.round(durationSeconds / 60) : null
+      } catch {
+        newEta = null
+      }
+    }
+
+    // Update the suggestion with new sequence, bumped version and recalculated ETA
     await supabase.from('dispatch_suggestions').update({
       suggested_sequence: newSequence.map(o => o.id),
       suggestion_version: (suggestion.suggestion_version ?? 1) + 1,
-      predicted_eta: null,  // ETA invalidated by manual edit
+      predicted_eta: newEta,
     }).eq('id', suggestionId)
 
     setEditingSuggId(null)
@@ -542,6 +654,13 @@ export default function Operational() {
     () => new Set(suggestions.flatMap(s => s.suggested_sequence)),
     [suggestions],
   )
+
+  useEffect(() => {
+    if (!selectedDriverId) return
+    if (!drivers.some(d => d.id === selectedDriverId)) {
+      setSelectedDriverId(null)
+    }
+  }, [drivers, selectedDriverId])
 
   // Derived data for edit modal
   const editingSuggestion = useMemo(
@@ -601,45 +720,116 @@ export default function Operational() {
 
     for (const order of orders) {
       const platformColor = PLATFORM_COLORS[order.platform] ?? '#666677'
+      let state: OrderMarkerState
 
-      // Dispatched: filled balloon, fades to ghost after DISPATCH_GHOST_MS
+      // Border always follows platform, fill always follows current status.
       if (order.status === 'dispatched') {
         if (order.dispatched_at) {
           const elapsed = now - new Date(order.dispatched_at).getTime()
           if (elapsed < DISPATCH_GHOST_MS) {
-            map.set(order.id, { platformColor, opacity: 1,    label: '', filled: true })
-            continue
+            state = {
+              borderColor: platformColor,
+              fillColor: MARKER_STATUS_COLORS.recentlyDispatched,
+              opacity: 1,
+              label: '',
+              dashed: false,
+            }
+          } else {
+            state = {
+              borderColor: platformColor,
+              fillColor: MARKER_STATUS_COLORS.ghost,
+              opacity: 0.35,
+              label: '',
+              dashed: true,
+            }
+          }
+        } else {
+          state = {
+            borderColor: platformColor,
+            fillColor: MARKER_STATUS_COLORS.ghost,
+            opacity: 0.35,
+            label: '',
+            dashed: true,
           }
         }
-        map.set(order.id, { platformColor, opacity: 0.12, label: '', filled: true })
-        continue
+      } else {
+        const seqIdx = selectedSequence.indexOf(order.id)
+        if (seqIdx >= 0) {
+          state = {
+            borderColor: platformColor,
+            fillColor: MARKER_STATUS_COLORS.selectedSuggestion,
+            opacity: 1,
+            label: String(seqIdx + 1),
+            dashed: false,
+          }
+        } else if (allSuggestionOrderIds.has(order.id)) {
+          state = {
+            borderColor: platformColor,
+            fillColor: MARKER_STATUS_COLORS.pendingSuggestion,
+            opacity: 1,
+            label: '',
+            dashed: false,
+          }
+        } else {
+          state = {
+            borderColor: platformColor,
+            fillColor: MARKER_STATUS_COLORS.outsideSuggestion,
+            opacity: 1,
+            label: '',
+            dashed: false,
+          }
+        }
       }
 
-      // In selected suggestion → yellow filled with stop number
-      const seqIdx = selectedSequence.indexOf(order.id)
-      if (seqIdx >= 0) {
-        map.set(order.id, { platformColor: '#facc15', opacity: 1, label: String(seqIdx + 1), filled: true })
-        continue
+      // Optional visual focus by selected driver
+      if (selectedDriverId) {
+        const assignedDriver = orderDriverMap[order.id] ?? null
+        if (assignedDriver === selectedDriverId) {
+          state = {
+            ...state,
+            opacity: 1,
+          }
+        } else {
+          state = {
+            ...state,
+            opacity: Math.min(state.opacity, assignedDriver ? 0.35 : 0.22),
+          }
+        }
       }
 
-      // In any pending suggestion → platform color, outline
-      if (allSuggestionOrderIds.has(order.id)) {
-        map.set(order.id, { platformColor, opacity: 1, label: '', filled: false })
-        continue
-      }
-
-      // Default: platform color, outline
-      map.set(order.id, { platformColor, opacity: 1, label: '', filled: false })
+      map.set(order.id, state)
     }
 
     return map
-  }, [orders, selectedSequence, allSuggestionOrderIds, tick]) // eslint-disable-line
+  }, [orders, selectedSequence, allSuggestionOrderIds, tick, selectedDriverId, orderDriverMap]) // eslint-disable-line
 
   const popupOrder = orders.find(o => o.id === popupOrderId) ?? null
 
   // Stats
   const waitingCount    = orders.filter(o => ['awaiting_route', 'normalized', 'received'].includes(o.status)).length
   const dispatchedCount = orders.filter(o => o.status === 'dispatched').length
+  const selectedDriverName = selectedDriverId
+    ? (drivers.find(d => d.id === selectedDriverId)?.name ?? 'Motoboy')
+    : 'Todos'
+  const selectedDriverOrderCount = selectedDriverId
+    ? Object.values(orderDriverMap).filter(id => id === selectedDriverId).length
+    : 0
+
+  const driverHighlightMarkers = useMemo<HighlightFinalized[]>(() => {
+    if (!selectedDriverId) return []
+    return finalized
+      .filter(entry => entry.driverId === selectedDriverId)
+      .map(entry => {
+        const coord: [number, number] | null =
+          entry.latitude != null && entry.longitude != null
+            ? [entry.latitude, entry.longitude]
+            : geocodedCoords[entry.id] ?? null
+        return coord
+          ? { coord, code: entry.code, platformColor: PLATFORM_COLORS[entry.platform] ?? '#666677' }
+          : null
+      })
+      .filter(Boolean) as HighlightFinalized[]
+  }, [selectedDriverId, finalized, geocodedCoords])
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -693,10 +883,56 @@ export default function Operational() {
             <span className="op-stat-val">{dispatchedCount}</span>
             <span className="op-stat-lbl">Despachados</span>
           </div>
-          <div className="op-stat">
-            <span className="op-stat-dot" style={{ background: '#60a5fa' }} />
-            <span className="op-stat-val">{drivers.length}</span>
-            <span className="op-stat-lbl">Motoboys</span>
+          <div className={`op-driver-filter ${driverFilterOpen ? 'open' : ''}`} ref={driverFilterRef}>
+            <button
+              className="op-stat op-stat-driver-btn"
+              onClick={() => setDriverFilterOpen(prev => !prev)}
+              type="button"
+            >
+              <span className="op-stat-dot" style={{ background: '#60a5fa' }} />
+              <span className="op-stat-val">{selectedDriverId ? selectedDriverOrderCount : drivers.length}</span>
+              <span className="op-stat-lbl">{selectedDriverId ? `Motoboy: ${selectedDriverName}` : 'Motoboys'}</span>
+              <svg
+                className={`op-stat-chevron ${driverFilterOpen ? 'open' : ''}`}
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            {driverFilterOpen && (
+              <div className="op-driver-menu">
+                <button
+                  className={`op-driver-menu-item ${selectedDriverId == null ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedDriverId(null)
+                    setDriverFilterOpen(false)
+                  }}
+                  type="button"
+                >
+                  Todos os motoboys
+                </button>
+                {drivers.map(driver => (
+                  <button
+                    key={driver.id}
+                    className={`op-driver-menu-item ${selectedDriverId === driver.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedDriverId(driver.id)
+                      setDriverFilterOpen(false)
+                    }}
+                    type="button"
+                  >
+                    {driver.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -710,6 +946,18 @@ export default function Operational() {
             markerStates={markerStates}
             routeCoords={geoRouteCoords.length >= 2 ? geoRouteCoords : routeCoords}
             onOrderCtrlClick={(id) => setPopupOrderId(prev => prev === id ? null : id)}
+            driverHighlightMarkers={driverHighlightMarkers}
+            highlightFinalized={(() => {
+              const f = finalized.find(e => e.id === selectedFinalizedId)
+              if (!f) return null
+              const coord: [number, number] | null =
+                f.latitude != null && f.longitude != null
+                  ? [f.latitude, f.longitude]
+                  : geocodedCoords[f.id] ?? null
+              return coord
+                ? { coord, code: f.code, platformColor: PLATFORM_COLORS[f.platform] ?? '#666677' }
+                : null
+            })()}
           />
 
           {popupOrder && (
@@ -721,30 +969,37 @@ export default function Operational() {
 
           {/* Legend */}
           <div className="map-legend">
+            <div className="legend-note">Borda do ícone = plataforma</div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: '#555566' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.outsideSuggestion }} />
               Fora de sugestão
             </div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: '#60a5fa' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.pendingSuggestion }} />
               Em sugestão pendente
             </div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: '#facc15' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.selectedSuggestion }} />
               Sugestão selecionada
             </div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: '#4ade80' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.recentlyDispatched }} />
               Recém despachado
             </div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: 'rgba(255,255,255,0.2)', border: '1px dashed #444' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.ghost, border: '1px dashed #444' }} />
               Fantasma
             </div>
             <div className="legend-row">
               <span style={{ fontSize: 14, lineHeight: 1 }}>🏠</span>
               Loja
             </div>
+            {selectedDriverId && (
+              <div className="legend-row">
+                <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.driverFocus }} />
+                Foco: {selectedDriverName}
+              </div>
+            )}
           </div>
         </div>
 
@@ -829,7 +1084,13 @@ export default function Operational() {
                 </div>
               ) : (
                 finalized.map(entry => (
-                  <FinalizedBlock key={entry.id} entry={entry} />
+                  <FinalizedBlock
+                    key={entry.id}
+                    entry={entry}
+                    isSelected={selectedFinalizedId === entry.id}
+                    isGeocoding={geocodingId === entry.id}
+                    onClick={() => handleFinalizedClick(entry)}
+                  />
                 ))
               )
             )}
@@ -868,21 +1129,34 @@ interface EditSuggestionModalProps {
 function EditSuggestionModal({
   suggestion, availableOrders, otherSuggestions, storeCoord, onSave, onClose,
 }: EditSuggestionModalProps) {
-  const [sequence, setSequence]       = useState<Order[]>(suggestion.orders)
-  const [showPicker, setShowPicker]   = useState(false)
-  const [saving, setSaving]           = useState(false)
-  const [optimizing, setOptimizing]   = useState(false)
-  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
-
-  // useRef avoids stale-closure bugs in onDrop: state updates are async,
-  // but ref mutations are synchronous, so onDrop always sees the current index.
-  const dragIdxRef = useRef<number | null>(null)
+  const [sequence, setSequence]     = useState<Order[]>(suggestion.orders)
+  const [showPicker, setShowPicker] = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [optimizing, setOptimizing] = useState(false)
 
   const currentIds = useMemo(() => new Set(sequence.map(o => o.id)), [sequence])
   const pickable   = availableOrders.filter(o => !currentIds.has(o.id))
 
   function removeOrder(orderId: string) {
     setSequence(prev => prev.filter(o => o.id !== orderId))
+  }
+
+  function moveUp(idx: number) {
+    if (idx === 0) return
+    setSequence(prev => {
+      const next = [...prev]
+      ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+      return next
+    })
+  }
+
+  function moveDown(idx: number) {
+    setSequence(prev => {
+      if (idx >= prev.length - 1) return prev
+      const next = [...prev]
+      ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+      return next
+    })
   }
 
   async function addOrder(order: Order) {
@@ -903,31 +1177,6 @@ function EditSuggestionModal({
     } else {
       setSequence(newSeq)
     }
-  }
-
-  function handleDragStart(idx: number) {
-    dragIdxRef.current = idx
-  }
-
-  function handleDragOver(e: React.DragEvent, idx: number) {
-    e.preventDefault()
-    setDragOverIdx(idx)
-  }
-
-  function handleDrop(idx: number) {
-    const fromIdx = dragIdxRef.current
-    dragIdxRef.current = null
-    setDragOverIdx(null)
-    if (fromIdx === null || fromIdx === idx) return
-    const next = [...sequence]
-    const [item] = next.splice(fromIdx, 1)
-    next.splice(idx, 0, item)
-    setSequence(next)
-  }
-
-  function handleDragEnd() {
-    dragIdxRef.current = null
-    setDragOverIdx(null)
   }
 
   async function handleSave() {
@@ -956,15 +1205,7 @@ function EditSuggestionModal({
             sequence.map((order, idx) => {
               const inOtherSugg = otherSuggestions.find(s => s.orders.some(o => o.id === order.id))
               return (
-                <div
-                  key={order.id}
-                  className={`edit-stop ${dragOverIdx === idx ? 'drag-over' : ''}`}
-                  draggable
-                  onDragStart={() => handleDragStart(idx)}
-                  onDragOver={e => handleDragOver(e, idx)}
-                  onDrop={() => handleDrop(idx)}
-                  onDragEnd={handleDragEnd}
-                >
+                <div key={order.id} className="edit-stop">
                   <span className="edit-stop-num">{idx + 1}</span>
                   <span className="edit-stop-dot" style={{ background: PLATFORM_COLORS[order.platform] }} />
                   <div className="edit-stop-info">
@@ -983,12 +1224,19 @@ function EditSuggestionModal({
                   >
                     −
                   </button>
-                  <div className="edit-stop-drag" title="Arrastar para reordenar">
-                    <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
-                      <line x1="0" y1="1"  x2="14" y2="1"  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                      <line x1="0" y1="5"  x2="14" y2="5"  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                      <line x1="0" y1="9"  x2="14" y2="9"  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
+                  <div className="edit-stop-move">
+                    <button
+                      className="edit-move-btn"
+                      onClick={() => moveUp(idx)}
+                      disabled={idx === 0}
+                      title="Mover para cima"
+                    >▲</button>
+                    <button
+                      className="edit-move-btn"
+                      onClick={() => moveDown(idx)}
+                      disabled={idx === sequence.length - 1}
+                      title="Mover para baixo"
+                    >▼</button>
                   </div>
                 </div>
               )
@@ -1067,12 +1315,22 @@ const FINALIZED_STATUS_LABEL: Record<string, { label: string; color: string }> =
   cancelled:  { label: 'Cancelado',  color: '#f87171' },
 }
 
-function FinalizedBlock({ entry }: { entry: FinalizedEntry }) {
+function FinalizedBlock({ entry, isSelected, isGeocoding, onClick }: {
+  entry: FinalizedEntry
+  isSelected: boolean
+  isGeocoding: boolean
+  onClick: () => void
+}) {
   const platformColor = PLATFORM_COLORS[entry.platform] ?? '#666677'
   const st = FINALIZED_STATUS_LABEL[entry.status] ?? { label: entry.status, color: '#888' }
+  const hasAddress = !!(entry.addressStreet || entry.addressZip || entry.latitude != null)
 
   return (
-    <div className="fin-block">
+    <div
+      className={`fin-block clickable ${isSelected ? 'selected' : ''} ${isGeocoding ? 'geocoding' : ''}`}
+      onClick={hasAddress ? onClick : undefined}
+      style={!hasAddress ? { cursor: 'default' } : undefined}
+    >
       <span className="fin-platform-dot" style={{ background: platformColor }} />
       <div className="fin-info">
         <div className="fin-top">
@@ -1088,6 +1346,7 @@ function FinalizedBlock({ entry }: { entry: FinalizedEntry }) {
         </div>
       </div>
       <span className="fin-amount">{formatCurrency(entry.totalAmount)}</span>
+      {isGeocoding && <span className="fin-geocoding-spinner" />}
     </div>
   )
 }

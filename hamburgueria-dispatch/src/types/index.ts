@@ -35,6 +35,7 @@ export interface Store {
   name: string
   address: string
   phone?: string
+  logo_url?: string | null
   latitude?: number
   longitude?: number
   active: boolean

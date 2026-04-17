@@ -119,10 +119,131 @@
   color: #555;
 }
 
+.settings-logo-editor {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: #151515;
+  border: 1px solid #242424;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.settings-logo-preview-wrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  border: 1px solid #2d2d2d;
+  background: #0f0f0f;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.settings-logo-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.settings-logo-placeholder {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-logo-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.settings-logo-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #1e1e1e;
+  border: 1px solid #2c2c2c;
+  border-radius: 7px;
+  color: #ddd;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 7px 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-logo-upload-btn:hover {
+  background: #252525;
+  border-color: #383838;
+}
+
+.settings-logo-upload-btn input {
+  display: none;
+}
+
+.settings-logo-upload-btn.is-loading {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.settings-logo-remove-btn {
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  border-radius: 7px;
+  color: #aaa;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.settings-logo-remove-btn:hover:not(:disabled) {
+  color: #ddd;
+  border-color: #505050;
+}
+
+.settings-logo-remove-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-logo-hint {
+  font-size: 11px;
+  color: #777;
+}
+
 .settings-coords {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.settings-geocode-btn {
+  background: #1e1e1e;
+  border: 1px solid #2e2e2e;
+  border-radius: 6px;
+  color: #aaa;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  align-self: flex-start;
+}
+
+.settings-geocode-btn:hover:not(:disabled) {
+  background: #252525;
+  color: #ddd;
+}
+
+.settings-geocode-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .settings-map-hint {
@@ -551,4 +672,40 @@
   border-radius: 6px;
   padding: 7px 10px;
   margin: 0;
+}
+
+@media (max-width: 1024px) {
+  .settings-body {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .settings-map-wrap {
+    height: 340px;
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-page {
+    padding: 20px 16px 24px;
+  }
+
+  .settings-coords {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-logo-editor {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .settings-geocode-btn,
+  .settings-save-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .settings-map-wrap {
+    height: 280px;
+  }
 }

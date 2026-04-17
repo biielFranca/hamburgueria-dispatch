@@ -350,3 +350,287 @@
   color: #666;
   font-size: 13px;
 }
+
+/* reports */
+.drivers-report {
+  margin: 12px 24px 0;
+  padding: 12px;
+  border: 1px solid #1e1e1e;
+  border-radius: 10px;
+  background: #131313;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drivers-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drivers-report-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+
+.drivers-report-subtitle {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.drivers-report-updated {
+  font-size: 11px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.drivers-report-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.drivers-report-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.drivers-report-date-wrap {
+  position: relative;
+  min-width: 170px;
+}
+
+.drivers-report-date-trigger {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 9px 6px 10px;
+  border-radius: 7px;
+  border: 1px solid #252525;
+  background: #141414;
+  color: #d1d5db;
+  font-size: 12px;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.drivers-report-date-value {
+  flex: 1;
+  text-align: left;
+}
+
+.drivers-report-date-trigger svg {
+  color: #6b7280;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.drivers-report-date-trigger:hover,
+.drivers-report-date-wrap.open .drivers-report-date-trigger {
+  border-color: #3a3a3a;
+  background: #171717;
+  color: #f3f4f6;
+}
+
+.drivers-report-date-trigger:hover svg,
+.drivers-report-date-wrap.open .drivers-report-date-trigger svg {
+  color: #d1d5db;
+}
+
+.drivers-report-calendar {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 120;
+  width: 238px;
+  border-radius: 10px;
+  border: 1px solid #2a2a2a;
+  background: #151515;
+  box-shadow: 0 14px 34px rgba(0,0,0,0.55);
+  padding: 10px;
+}
+
+.drivers-report-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.drivers-report-calendar-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+
+.drivers-report-calendar-nav {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid #2b2b2b;
+  background: #101010;
+  color: #9ca3af;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.drivers-report-calendar-nav:hover:not(:disabled) {
+  background: #1d1d1d;
+  color: #e5e7eb;
+  border-color: #3a3a3a;
+}
+
+.drivers-report-calendar-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.drivers-report-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.drivers-report-calendar-weekday {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b7280;
+  text-align: center;
+  padding: 3px 0;
+}
+
+.drivers-report-calendar-day {
+  width: 100%;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #262626;
+  background: #121212;
+  color: #d1d5db;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.drivers-report-calendar-day:hover:not(:disabled) {
+  background: #1d1d1d;
+  border-color: #3a3a3a;
+  color: #f3f4f6;
+}
+
+.drivers-report-calendar-day.outside {
+  color: #525252;
+}
+
+.drivers-report-calendar-day.selected {
+  background: #ffffff;
+  color: #0b0b0b;
+  border-color: #ffffff;
+}
+
+.drivers-report-calendar-day.disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.btn-generate-report,
+.btn-export-report {
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, opacity 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn-generate-report {
+  background: #fff;
+  color: #000;
+}
+
+.btn-generate-report:hover:not(:disabled) {
+  background: #ececec;
+}
+
+.btn-export-report {
+  background: #1b1b1b;
+  color: #d1d5db;
+  border-color: #2c2c2c;
+}
+
+.btn-export-report:hover:not(:disabled) {
+  background: #222;
+}
+
+.btn-generate-report:disabled,
+.btn-export-report:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.drivers-report-error {
+  border: 1px solid rgba(239,68,68,0.35);
+  background: rgba(239,68,68,0.08);
+  color: #fca5a5;
+  border-radius: 7px;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.drivers-report-table-wrap {
+  border: 1px solid #232323;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.drivers-report-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.drivers-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.drivers-report-table thead {
+  background: #181818;
+}
+
+.drivers-report-table th {
+  text-align: left;
+  color: #9ca3af;
+  font-weight: 700;
+  padding: 8px 10px;
+  border-bottom: 1px solid #252525;
+}
+
+.drivers-report-table td {
+  color: #d1d5db;
+  padding: 8px 10px;
+  border-top: 1px solid #1d1d1d;
+}
+
+.drivers-report-table tbody tr:hover td {
+  background: #171717;
+}

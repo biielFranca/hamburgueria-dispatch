@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { syncIfood } from '../../lib/ifood'
+import { pollOpenDeliveryEvents } from '../../lib/integrations/openDelivery'
 import './Integrations.css'
 
 interface Integration {
@@ -26,22 +27,25 @@ const PLATFORM_DEFS = [
     key: 'keeta',
     label: 'Keeta',
     color: '#27AE60',
-    description: 'Em breve',
-    disabled: true,
+    description: 'Recebe pedidos via Open Delivery. Logistics sempre gerenciada pela Keeta.',
+    fields: { clientId: 'Merchant ID', clientSecret: 'Client Secret' },
+    docsUrl: 'https://keeta.com.br',
   },
   {
     key: '99food',
     label: '99Food',
     color: '#F5A623',
-    description: 'Em breve',
-    disabled: true,
+    description: 'Recebe pedidos via Open Delivery com suporte a logística própria.',
+    fields: { clientId: 'Merchant ID', clientSecret: 'Client Secret' },
+    docsUrl: 'https://99app.com',
   },
   {
     key: 'cardapio_web',
     label: 'Cardápio Web',
     color: '#8B5CF6',
-    description: 'Em breve',
-    disabled: true,
+    description: 'Recebe pedidos do Cardápio Web via Open Delivery.',
+    fields: { clientId: 'Merchant ID', clientSecret: 'Client Secret' },
+    docsUrl: 'https://cardapio.com.br',
   },
 ]
 
@@ -111,8 +115,13 @@ function IntegrationCard({ def, integration, storeId, onSaved }: CardProps) {
     setError('')
 
     try {
-      const result = await syncIfood(storeId)
-      setTestResult(`✓ Sync ok - ${result.events} evento(s), ${result.inserted} inserido(s)`)
+      if (def.key === 'ifood') {
+        const result = await syncIfood(storeId)
+        setTestResult(`✓ Sync ok — ${result.events} evento(s), ${result.inserted} inserido(s)`)
+      } else {
+        await pollOpenDeliveryEvents(def.key as '99food' | 'keeta' | 'cardapio_web', storeId, clientId.trim())
+        setTestResult(`✓ Conexão ok — ${def.label} respondeu com sucesso`)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }

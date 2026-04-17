@@ -63,6 +63,86 @@
   line-height: 1;
 }
 
+.op-driver-filter {
+  position: relative;
+}
+
+.op-driver-filter.open {
+  z-index: 1200;
+}
+
+.op-stat-driver-btn {
+  cursor: pointer;
+  min-width: 190px;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.op-stat-driver-btn:hover {
+  border-color: #2a2a2a;
+  background: #181818;
+}
+
+.op-stat-driver-btn .op-stat-lbl {
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.op-stat-chevron {
+  color: #666;
+  margin-left: 4px;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.op-stat-chevron.open {
+  transform: rotate(180deg);
+}
+
+.op-driver-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 240px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #121212;
+  border: 1px solid #252525;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.45);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.op-driver-menu-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #9ca3af;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.op-driver-menu-item:hover {
+  background: #1c1c1c;
+  color: #e5e7eb;
+}
+
+.op-driver-menu-item.active {
+  background: rgba(34,211,238,0.12);
+  color: #67e8f9;
+  border-color: rgba(34,211,238,0.25);
+}
+
 /* ══════════════════════════════════════════════════════
    Split body: map left, panel right
 ══════════════════════════════════════════════════════ */
@@ -128,6 +208,13 @@
   flex-direction: column;
   gap: 5px;
   pointer-events: none;
+}
+
+.legend-note {
+  font-size: 9px;
+  color: #6b7280;
+  letter-spacing: 0.2px;
+  margin-bottom: 2px;
 }
 
 .legend-row {
@@ -229,6 +316,7 @@
    Suggestion blocks
 ══════════════════════════════════════════════════════ */
 .sug-block {
+  flex-shrink: 0;
   background: #141414;
   border: 1px solid #1e1e1e;
   border-radius: 10px;
@@ -481,6 +569,7 @@
    In-progress blocks
 ══════════════════════════════════════════════════════ */
 .inprog-block {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -584,6 +673,7 @@
    Finalized blocks
 ══════════════════════════════════════════════════════ */
 .fin-block {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -591,6 +681,40 @@
   background: #141414;
   border: 1px solid #1e1e1e;
   border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.fin-block.clickable {
+  cursor: pointer;
+}
+
+.fin-block.clickable:hover {
+  background: #181818;
+  border-color: #2a2a2a;
+}
+
+.fin-block.selected {
+  border-color: #facc15;
+  background: #1c1b0a;
+}
+
+.fin-block.geocoding {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.fin-geocoding-spinner {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #333;
+  border-top-color: #888;
+  border-radius: 50%;
+  animation: fin-spin 0.7s linear infinite;
+}
+
+@keyframes fin-spin {
+  to { transform: rotate(360deg); }
 }
 
 .fin-platform-dot {
@@ -737,22 +861,7 @@
   background: #1a1a1a;
   border: 1px solid #232323;
   border-radius: 8px;
-  cursor: grab;
-  user-select: none;
-  transition: background 0.1s, border-color 0.1s, opacity 0.1s;
-}
-
-.edit-stop:active {
-  cursor: grabbing;
-}
-
-.edit-stop.dragging {
-  opacity: 0.4;
-}
-
-.edit-stop.drag-over {
-  border-color: #facc15;
-  background: #1c1b0a;
+  transition: background 0.1s, border-color 0.1s;
 }
 
 .edit-stop-num {
@@ -828,16 +937,37 @@
   background: rgba(239,68,68,0.2);
 }
 
-.edit-stop-drag {
-  color: #3a3a3a;
+.edit-stop-move {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   flex-shrink: 0;
-  cursor: grab;
-  padding: 2px 0;
-  transition: color 0.15s;
 }
 
-.edit-stop:hover .edit-stop-drag {
-  color: #555;
+.edit-move-btn {
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 3px;
+  color: #666;
+  font-size: 8px;
+  width: 20px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+  line-height: 1;
+}
+
+.edit-move-btn:hover:not(:disabled) {
+  background: #2e2e2e;
+  color: #ccc;
+}
+
+.edit-move-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
 }
 
 .edit-empty {

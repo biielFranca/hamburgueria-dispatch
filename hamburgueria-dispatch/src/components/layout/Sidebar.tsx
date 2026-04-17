@@ -1,5 +1,6 @@
 import type { Page } from '../../App'
 import type { UserPermissions, UserRole } from '../../types'
+import deliveryDispatchIcon from '../../assets/branding/delivery-dispatch-icon-square.png'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -15,7 +16,9 @@ export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, use
   return (
     <div className="sidebar">
       <div className="sidebar-top">
-        <span className="sidebar-logo">D</span>
+        <span className="sidebar-logo">
+          <img src={deliveryDispatchIcon} alt="Delivery Dispatch" className="sidebar-logo-img" />
+        </span>
       </div>
 
       <nav className="sidebar-nav">
@@ -63,6 +66,45 @@ export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, use
             <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
             <circle cx="9" cy="7" r="4"/>
             <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+        </button>}
+
+        {isOwner && <button
+          className={`sidebar-btn ${activePage === 'cardapio' ? 'active' : ''}`}
+          onClick={() => onNavigate('cardapio')}
+          title="Cardápio"
+        >
+          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M3 3h18v4H3z"/>
+            <path d="M3 7l2 14h14l2-14"/>
+            <path d="M9 11a3 3 0 006 0"/>
+          </svg>
+        </button>}
+
+        {isOwner && <button
+          className={`sidebar-btn ${activePage === 'estoque' ? 'active' : ''}`}
+          onClick={() => onNavigate('estoque')}
+          title="Estoque"
+        >
+          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <rect x="2" y="7" width="20" height="14" rx="2"/>
+            <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
+            <line x1="12" y1="12" x2="12" y2="17"/>
+            <line x1="9.5" y1="14.5" x2="14.5" y2="14.5"/>
+          </svg>
+        </button>}
+
+        {isOwner && <button
+          className={`sidebar-btn ${activePage === 'social' ? 'active' : ''}`}
+          onClick={() => onNavigate('social')}
+          title="Mídias Sociais"
+        >
+          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <circle cx="18" cy="5" r="3"/>
+            <circle cx="6" cy="12" r="3"/>
+            <circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
           </svg>
         </button>}
 

@@ -20,6 +20,13 @@
   gap: 8px;
 }
 
+.login-logo {
+  width: min(250px, 92%);
+  height: auto;
+  display: block;
+  margin-bottom: 6px;
+}
+
 .login-title {
   font-size: 28px;
   font-weight: 700;
