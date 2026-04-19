@@ -14,12 +14,18 @@ interface PollStatus {
 export type { PollStatus }
 
 export default function IfoodPoller() {
-  const storeIdRef  = useRef<string | null>(null)
-  const activeRef   = useRef(false)
-  const [status, setStatus] = useState<PollStatus>({ lastSync: null, lastError: null, syncing: false })
+  const [storeId, setStoreId] = useState<string | null>(null)
+  const [active, setActive]   = useState(false)
+  const activeRef             = useRef(false)
+  const [status, setStatus]   = useState<PollStatus>({ lastSync: null, lastError: null, syncing: false })
 
-  // Resolve store_id + check if integration is active
+  // keep ref in sync so the polling interval reads fresh value without restart
+  useEffect(() => { activeRef.current = active }, [active])
+
+  // Resolve store_id + check if integration is active + subscribe to changes
   useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
     async function init() {
       const { data: authData } = await supabase.auth.getUser()
       if (!authData.user) return
@@ -28,9 +34,9 @@ export default function IfoodPoller() {
         .from('users').select('store_id').eq('auth_id', authData.user.id).single()
       if (!userData) return
 
-      storeIdRef.current = userData.store_id
+      setStoreId(userData.store_id)
 
-      // Check if iFood integration is active
+      // Check current state
       const { data: integration } = await supabase
         .from('store_integrations')
         .select('active')
@@ -38,19 +44,48 @@ export default function IfoodPoller() {
         .eq('platform', 'ifood')
         .maybeSingle()
 
-      activeRef.current = integration?.active === true
+      setActive(integration?.active === true)
+
+      // Realtime: react to active toggle from Integrations page without reload
+      channel = supabase
+        .channel(`ifood-poller-${userData.store_id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'store_integrations',
+            filter: `store_id=eq.${userData.store_id}`,
+          },
+          (payload) => {
+            const row = (payload.new ?? payload.old) as { platform?: string; active?: boolean }
+            if (row?.platform !== 'ifood') return
+            if (payload.eventType === 'DELETE') {
+              setActive(false)
+            } else {
+              setActive(row.active === true)
+            }
+          },
+        )
+        .subscribe()
     }
     init()
+
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
   }, [])
 
-  // Polling loop
+  // Polling loop — driven by storeId + active
   useEffect(() => {
+    if (!storeId || !active) return
+
     async function poll() {
-      if (!storeIdRef.current || !activeRef.current) return
+      if (!storeId || !activeRef.current) return
 
       setStatus(s => ({ ...s, syncing: true }))
       try {
-        const result = await syncIfood(storeIdRef.current)
+        const result = await syncIfood(storeId)
         setStatus({
           lastSync: new Date(),
           lastError: result.errors.length > 0 ? result.errors[0] : null,
@@ -65,7 +100,7 @@ export default function IfoodPoller() {
       }
     }
 
-    // Initial poll after short delay (let init() resolve first)
+    // Initial poll after short delay
     const initialTimeout = setTimeout(poll, 3_000)
     const interval = setInterval(poll, POLL_INTERVAL_MS)
 
@@ -73,11 +108,10 @@ export default function IfoodPoller() {
       clearTimeout(initialTimeout)
       clearInterval(interval)
     }
-  }, [])
+  }, [storeId, active])
 
-  // No UI — this is a background component
-  // Status dot shown in a small indicator bottom-left
-  if (!activeRef.current && !status.lastSync) return null
+  // No UI when integration is off and nothing synced yet
+  if (!active && !status.lastSync) return null
 
   return (
     <div
@@ -110,11 +144,17 @@ export default function IfoodPoller() {
           width: 6,
           height: 6,
           borderRadius: '50%',
-          background: status.lastError ? '#ef4444' : status.syncing ? '#F5A623' : '#27AE60',
+          background: status.lastError
+            ? '#ef4444'
+            : status.syncing
+              ? '#F5A623'
+              : active
+                ? '#27AE60'
+                : '#555',
           flexShrink: 0,
         }}
       />
-      iFood
+      iFood{!active && status.lastSync ? ' (off)' : ''}
     </div>
   )
 }

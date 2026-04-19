@@ -1,20 +1,19 @@
 import { supabase } from './supabase'
+import { logOrderEvent } from './orderEvents'
+import { routingProvider } from './providers'
 import type { Order, Store } from '../types'
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const OSRM_BASE            = import.meta.env.VITE_ROUTES_API_URL ?? 'https://router.project-osrm.org'
-const OSRM_PROFILE         = import.meta.env.VITE_OSRM_PROFILE   ?? 'driving'
-// VITE_SOLO_WAIT_MIN overrides the solo-order wait (useful for dev/testing, default 10 min)
 const SINGLE_ORDER_WAIT_MS = Number(import.meta.env.VITE_SOLO_WAIT_MIN ?? 10) * 60_000
 const MAX_REJECTIONS       = 3             // after this, mark as dispatch_timeout
 
 // Mutex: prevents concurrent engine runs from creating duplicate suggestions
 let engineRunning = false
 
-// ── Haversine distance ────────────────────────────────────────────────────────
+// ── Haversine distance (pure, kept in frontend for map scoring) ───────────────
 
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371
   const dLat = (lat2 - lat1) * Math.PI / 180
   const dLon = (lon2 - lon1) * Math.PI / 180
@@ -27,48 +26,16 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 // ── OSRM route query ──────────────────────────────────────────────────────────
 
-interface RouteResult {
-  duration: number   // seconds
-  distance: number   // meters
-}
-
-async function getRouteDuration(
-  coords: [number, number][],  // [lat, lng] pairs
-): Promise<RouteResult> {
-  // OSRM expects lng,lat order; profile goes in the URL path, not as a query param
-  const coordStr = coords.map(([lat, lng]) => `${lng},${lat}`).join(';')
-  const url = `${OSRM_BASE}/route/v1/${OSRM_PROFILE}/${coordStr}?overview=false`
-
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`OSRM error ${res.status}`)
-  const json = await res.json()
-  if (!json.routes?.length) throw new Error('No route found')
-
-  return {
-    duration: json.routes[0].duration,
-    distance: json.routes[0].distance,
-  }
-}
-
 /**
- * Fetch real road geometry from OSRM for display on the map.
+ * Fetch real road geometry for display on the map.
  * Returns [lat, lng] pairs (Leaflet format).
- * Throws on network/API error — caller should fall back to straight lines.
+ * Throws on error — caller should fall back to straight lines.
  */
 export async function fetchRouteGeometry(
-  coords: [number, number][],  // [lat, lng] pairs
+  coords: [number, number][],
 ): Promise<[number, number][]> {
-  const coordStr = coords.map(([lat, lng]) => `${lng},${lat}`).join(';')
-  const url = `${OSRM_BASE}/route/v1/${OSRM_PROFILE}/${coordStr}?overview=full&geometries=geojson`
-
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`OSRM geometry error ${res.status}`)
-  const json = await res.json()
-  if (!json.routes?.length) throw new Error('No route found')
-
-  // OSRM returns [lng, lat] — convert to [lat, lng] for Leaflet
-  return (json.routes[0].geometry.coordinates as [number, number][])
-    .map(([lng, lat]) => [lat, lng] as [number, number])
+  const result = await routingProvider.getRouteGeometry(coords)
+  return result.coords
 }
 
 // ── Fetch eligible orders ─────────────────────────────────────────────────────
@@ -123,6 +90,25 @@ async function createSuggestion(
     .from('orders')
     .update({ status: 'in_suggestion' })
     .in('id', sequence.map(o => o.id))
+
+  // Audit: one event per order in the suggestion
+  for (let i = 0; i < sequence.length; i++) {
+    const o = sequence[i]
+    logOrderEvent({
+      orderId:   o.id,
+      storeId,
+      eventType: 'route_suggested',
+      actorType: 'system',
+      previous:  { status: o.status },
+      next:      { status: 'in_suggestion' },
+      metadata: {
+        suggestion_id: suggestion.id,
+        position:      i + 1,
+        group_size:    sequence.length,
+        predicted_eta: predictedEta ? Math.round(predictedEta / 60) : null,
+      },
+    })
+  }
 }
 
 // ── Handle rejection timeout ──────────────────────────────────────────────────
@@ -134,6 +120,16 @@ async function handleTimeouts(orders: Order[], storeId: string) {
         .from('orders')
         .update({ status: 'dispatch_timeout', route_eligibility: 'blocked', route_block_reason: 'max_rejections' })
         .eq('id', order.id)
+
+      logOrderEvent({
+        orderId:   order.id,
+        storeId,
+        eventType: 'timeout',
+        actorType: 'system',
+        previous:  { status: order.status, rejection_count: order.rejection_count ?? 0 },
+        next:      { status: 'dispatch_timeout', route_block_reason: 'max_rejections' },
+        metadata:  { reason: 'max_rejections', limit: MAX_REJECTIONS },
+      })
 
       // Insert a timeout alert in a dedicated alerts table if it exists — best effort
       try {
@@ -159,14 +155,14 @@ async function handleTimeouts(orders: Order[], storeId: string) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function permutations<T>(arr: T[]): T[][] {
+export function permutations<T>(arr: T[]): T[][] {
   if (arr.length <= 1) return [arr]
   return arr.flatMap((item, i) =>
     permutations([...arr.slice(0, i), ...arr.slice(i + 1)]).map(p => [item, ...p]),
   )
 }
 
-function combinations<T>(arr: T[], k: number): T[][] {
+export function combinations<T>(arr: T[], k: number): T[][] {
   if (k === 0) return [[]]
   if (arr.length < k) return []
   const [first, ...rest] = arr
@@ -195,7 +191,7 @@ function nearestNeighborScore(storeCoord: [number, number], orders: Order[]): nu
 }
 
 /** Greedy nearest-neighbor ordering (fallback when OSRM unavailable). */
-function nearestNeighborOrder(storeCoord: [number, number], orders: Order[]): Order[] {
+export function nearestNeighborOrder(storeCoord: [number, number], orders: Order[]): Order[] {
   let pos = storeCoord
   const remaining = [...orders]
   const result: Order[] = []
@@ -218,7 +214,7 @@ const MAX_GROUP = 3  // max deliveries per suggestion
  * Among all 2- and 3-order subsets, return the most efficient group.
  * Scored by haversine nearest-neighbor distance / num orders (lower = better).
  */
-function selectBestGroup(
+export function selectBestGroup(
   orders: Order[],
   storeCoord: [number, number],
 ): Order[] {
@@ -252,7 +248,7 @@ export async function findOptimalSequence(
   if (orders.length === 1) {
     let dur: number | null = null
     try {
-      const r = await getRouteDuration([storeCoord, [orders[0].latitude!, orders[0].longitude!]])
+      const r = await routingProvider.getRouteDuration([storeCoord, [orders[0].latitude!, orders[0].longitude!]])
       dur = r.duration
     } catch {}
     return { sequence: orders, durationSeconds: dur }
@@ -262,7 +258,7 @@ export async function findOptimalSequence(
 
   const settled = await Promise.allSettled(
     perms.map(p =>
-      getRouteDuration([
+      routingProvider.getRouteDuration([
         storeCoord,
         ...p.map(o => [o.latitude!, o.longitude!] as [number, number]),
       ]),
@@ -371,7 +367,7 @@ export async function runRouteEngine(storeId: string): Promise<RouteEngineResult
 
     let duration: number | null = null
     try {
-      const r = await getRouteDuration([storeCoord, [solo.latitude!, solo.longitude!]])
+      const r = await routingProvider.getRouteDuration([storeCoord, [solo.latitude!, solo.longitude!]])
       duration = r.duration
     } catch {
       duration = null

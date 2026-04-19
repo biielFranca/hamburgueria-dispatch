@@ -3,19 +3,14 @@ import { supabase } from '../../lib/supabase'
 import { confirmIfoodDispatch } from '../../lib/integrations/ifood'
 import { confirmOpenDeliveryDispatch } from '../../lib/integrations/openDelivery'
 import { fetchRouteGeometry, findOptimalSequence } from '../../lib/routeEngine'
+import { logOrderEvent } from '../../lib/orderEvents'
 import type { Driver, Order, Platform, Store } from '../../types'
+import { PLATFORM_COLORS } from '../../lib/platformConfig'
 import OperationalMap, { DISPATCH_GHOST_MS } from './OperationalMap'
 import type { HighlightFinalized, OrderMarkerState } from './OperationalMap'
 import './Operational.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-const PLATFORM_COLORS: Record<Platform, string> = {
-  ifood:        '#EA1D2C',
-  keeta:        '#27AE60',
-  '99food':     '#F5A623',
-  cardapio_web: '#8B5CF6',
-}
 
 const MARKER_STATUS_COLORS = {
   outsideSuggestion:  'rgba(148, 163, 184, 0.38)',
@@ -276,13 +271,26 @@ export default function Operational() {
   const [popupOrderId, setPopupOrderId]   = useState<string | null>(null)
   const storeIdRef                        = useRef<string | null>(null)
   const driverFilterRef                   = useRef<HTMLDivElement | null>(null)
+  // Monotonic generation counter — guards enrichment race: only the last
+  // fetchAll() caller is allowed to commit state. Stale replies drop silently.
+  const fetchGenRef                       = useRef(0)
   const [tick, setTick]                   = useState(0)
 
-  // Tick every second for countdown + ghost cleanup
+  // Event-driven tick: only schedule a re-render at the exact moment an order
+  // transitions from "recently dispatched" to "ghost". Previously ran every
+  // 1s regardless of state, costing 60 renders/min even when nothing changed.
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000)
-    return () => clearInterval(id)
-  }, [])
+    const now = Date.now()
+    const upcomingTransitions = orders
+      .filter(o => o.status === 'dispatched' && o.dispatched_at)
+      .map(o => new Date(o.dispatched_at!).getTime() + DISPATCH_GHOST_MS)
+      .filter(t => t > now)
+    if (upcomingTransitions.length === 0) return
+    const soonest = Math.min(...upcomingTransitions)
+    const delay = Math.max(soonest - now, 100)
+    const id = setTimeout(() => setTick(t => t + 1), delay)
+    return () => clearTimeout(id)
+  }, [orders, tick])
 
   // Ghost cleanup: remove in-progress entries older than DISPATCH_GHOST_MS
   useEffect(() => {
@@ -319,6 +327,7 @@ export default function Operational() {
     }
 
     const sid = storeIdRef.current!
+    const myGen = ++fetchGenRef.current
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
@@ -330,7 +339,10 @@ export default function Operational() {
         .not('status', 'in', '("delivered","cancelled")')
         .order('rejection_count', { ascending: false })
         .order('created_at', { ascending: false }),
-      supabase.from('dispatch_suggestions').select('*')
+      // Single-query JOIN: suggestions + their orders via the FK
+      // dispatch_suggestion_orders.suggestion_id. Cuts 2 round-trips.
+      supabase.from('dispatch_suggestions')
+        .select('*, dispatch_suggestion_orders(position, order:orders(*))')
         .eq('store_id', sid)
         .eq('status', 'pending_review')
         .order('created_at', { ascending: false }),
@@ -343,22 +355,28 @@ export default function Operational() {
     ])
 
     const fetchedOrders  = (ordersRes.data ?? []) as Order[]
-    const rawSuggestions = suggestionsRes.data ?? []
+    const rawSuggestions = (suggestionsRes.data ?? []) as Array<
+      Record<string, unknown> & {
+        suggested_sequence: string[]
+        dispatch_suggestion_orders?: Array<{ position: number; order: Order | null }>
+      }
+    >
 
-    // Enrich suggestions with their orders
-    const allSeqIds = [...new Set(rawSuggestions.flatMap(s => s.suggested_sequence as string[]))]
-    let seqOrders: Order[] = []
-    if (allSeqIds.length > 0) {
-      const { data } = await supabase.from('orders').select('*').in('id', allSeqIds)
-      seqOrders = (data ?? []) as Order[]
-    }
-
-    const enriched: SuggestionRow[] = rawSuggestions.map(s => ({
-      ...s,
-      orders: (s.suggested_sequence as string[])
-        .map(id => seqOrders.find(o => o.id === id))
-        .filter(Boolean) as Order[],
-    }))
+    // Build per-suggestion order lookup from the embedded JOIN. Falls back
+    // to an empty list if FK embed returned nothing (keeps render safe).
+    const enriched: SuggestionRow[] = rawSuggestions.map(s => {
+      const joined = s.dispatch_suggestion_orders ?? []
+      const byId = new Map<string, Order>()
+      for (const row of joined) {
+        if (row.order) byId.set(row.order.id, row.order)
+      }
+      const ordered = (s.suggested_sequence ?? [])
+        .map(id => byId.get(id))
+        .filter(Boolean) as Order[]
+      // Drop the embedded join field from the row we surface to UI
+      const { dispatch_suggestion_orders: _omit, ...rest } = s
+      return { ...(rest as Record<string, unknown>), orders: ordered } as SuggestionRow
+    })
 
     // ── Driver by order map (for finalized list + map highlight) ───────────
     const finalizedOrders = (finalizedRes.data ?? []) as Order[]
@@ -426,6 +444,10 @@ export default function Operational() {
       addressZip:          o.address_zip ?? null,
     }))
 
+    // Race guard: a newer fetchAll() started after us — its result will be
+    // the truth. Drop our stale snapshot to avoid flicker / wrong sequence.
+    if (myGen !== fetchGenRef.current) return
+
     setStore((storeRes.data ?? null) as Store | null)
     setDrivers((driversRes.data ?? []) as Driver[])
     setOrders(fetchedOrders)
@@ -482,11 +504,38 @@ export default function Operational() {
   useEffect(() => {
     fetchAll()
 
+    // Coalesce realtime bursts: many postgres_changes events arriving in a
+    // short window trigger only ONE fetchAll. Prevents rebuilding state 5+
+    // times in a row when a suggestion touches orders + suggestions + drivers.
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    let inFlight = false
+    let pendingWhileInFlight = false
+
+    async function scheduleFetch() {
+      if (inFlight) {
+        pendingWhileInFlight = true
+        return
+      }
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(async () => {
+        inFlight = true
+        try {
+          await fetchAll()
+        } finally {
+          inFlight = false
+          if (pendingWhileInFlight) {
+            pendingWhileInFlight = false
+            scheduleFetch()
+          }
+        }
+      }, 300)
+    }
+
     const channel = supabase
       .channel('op-main')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatch_suggestions' }, fetchAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, fetchAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, scheduleFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatch_suggestions' }, scheduleFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, scheduleFetch)
       .subscribe()
 
     // Poll fallback: refreshes panel even when Realtime events don't fire
@@ -494,6 +543,7 @@ export default function Operational() {
     const pollTimer = setInterval(fetchAll, 10_000)
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
       supabase.removeChannel(channel)
       clearInterval(pollTimer)
     }
@@ -522,6 +572,24 @@ export default function Operational() {
         dispatched_at: now,
       }).in('id', orderIds),
     ])
+
+    // Audit: one 'dispatched' event per order
+    for (const order of suggestion.orders) {
+      logOrderEvent({
+        orderId:   order.id,
+        storeId:   order.store_id,
+        eventType: 'dispatched',
+        actorType: 'operator',
+        previous:  { status: order.status },
+        next:      { status: 'dispatched', dispatched_at: now },
+        metadata: {
+          suggestion_id: suggestion.id,
+          driver_id:     driverId,
+          driver_name:   driver?.name ?? null,
+          stop_count:    suggestion.orders.length,
+        },
+      })
+    }
 
     // Notify platforms — best-effort, never block the UI on failure
     for (const order of suggestion.orders) {
@@ -554,9 +622,25 @@ export default function Operational() {
     await fetchAll()
   }
 
-  async function handleReject(suggestion: SuggestionRow) {
+  async function handleBulkReject() {
+    if (suggestions.length < 2) return
+    const ok = window.confirm(
+      `Recusar todas as ${suggestions.length} sugestões pendentes? Os pedidos voltam à fila.`,
+    )
+    if (!ok) return
+
+    setLoadingAction('__bulk__')
+    for (const s of suggestions) {
+      // reuse single handler to keep audit/logic consistent
+      await handleReject(s, true)
+    }
+    setLoadingAction(null)
+    await fetchAll()
+  }
+
+  async function handleReject(suggestion: SuggestionRow, skipRefresh = false) {
     const now = new Date().toISOString()
-    setLoadingAction(suggestion.id)
+    if (!skipRefresh) setLoadingAction(suggestion.id)
 
     await supabase.from('dispatch_suggestions').update({
       status: 'rejected',
@@ -569,11 +653,23 @@ export default function Operational() {
         status:          'awaiting_route',
         rejection_count: (order.rejection_count ?? 0) + 1,
       }).eq('id', order.id)
+
+      logOrderEvent({
+        orderId:   order.id,
+        storeId:   order.store_id,
+        eventType: 'rejected',
+        actorType: 'operator',
+        previous:  { status: order.status, rejection_count: order.rejection_count ?? 0 },
+        next:      { status: 'awaiting_route', rejection_count: (order.rejection_count ?? 0) + 1 },
+        metadata:  { suggestion_id: suggestion.id },
+      })
     }
 
     if (selectedSuggId === suggestion.id) setSelectedSuggId(null)
-    setLoadingAction(null)
-    await fetchAll()
+    if (!skipRefresh) {
+      setLoadingAction(null)
+      await fetchAll()
+    }
   }
 
   async function handleEditSave(suggestionId: string, newSequence: Order[]) {
@@ -1044,7 +1140,35 @@ export default function Operational() {
                   Nenhuma sugestão pendente
                 </div>
               ) : (
-                suggestions.map(s => (
+                <>
+                  {suggestions.length >= 2 && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      padding: '4px 8px 8px',
+                    }}>
+                      <button
+                        onClick={handleBulkReject}
+                        disabled={loadingAction === '__bulk__'}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: '4px 10px',
+                          borderRadius: 4,
+                          border: '1px solid #5a1b1b',
+                          background: '#2a0e0e',
+                          color: '#fca5a5',
+                          cursor: loadingAction === '__bulk__' ? 'wait' : 'pointer',
+                        }}
+                        title="Recusar todas as sugestões pendentes"
+                      >
+                        {loadingAction === '__bulk__'
+                          ? 'Recusando...'
+                          : `Recusar todas (${suggestions.length})`}
+                      </button>
+                    </div>
+                  )}
+                  {suggestions.map(s => (
                   <SuggestionBlock
                     key={s.id}
                     suggestion={s}
@@ -1058,7 +1182,8 @@ export default function Operational() {
                     onReject={() => handleReject(s)}
                     onEdit={() => setEditingSuggId(s.id)}
                   />
-                ))
+                ))}
+                </>
               )
             ) : activeTab === 'inprogress' ? (
               inProgress.length === 0 ? (

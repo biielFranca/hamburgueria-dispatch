@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { isEmail, isInternalEmail, resolveLoginEmail } from '../../lib/authHelpers'
 import deliveryDispatchLogo from '../../assets/branding/delivery-dispatch-logo-full.png'
 import './Login.css'
 
@@ -7,27 +8,29 @@ export default function Login({ sessionExpired = false }: { sessionExpired?: boo
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [info, setInfo]   = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleLogin() {
     if (!username || !password) {
-      setError('Preencha usuário e senha')
+      setError('Preencha usuário/email e senha')
       return
     }
 
     setLoading(true)
     setError('')
+    setInfo('')
 
     try {
-      const normalizedUser = username.trim().toLowerCase()
-      if (!/^[a-z0-9._-]{3,32}$/.test(normalizedUser)) {
-        setError('Formato de usuário inválido')
+      const email = resolveLoginEmail(username)
+      if (!email) {
+        setError('Formato de usuário/email inválido')
         setLoading(false)
         return
       }
 
       const { error: authError } = await supabase.auth.signInWithPassword({
-        email: `${normalizedUser}@dispatch.internal`,
+        email,
         password,
       })
 
@@ -45,6 +48,26 @@ export default function Login({ sessionExpired = false }: { sessionExpired?: boo
     setLoading(false)
   }
 
+  async function handleResetPassword() {
+    setError('')
+    setInfo('')
+    const input = username.trim().toLowerCase()
+    if (!isEmail(input)) {
+      setError('Digite seu email real para recuperar a senha')
+      return
+    }
+    if (isInternalEmail(input)) {
+      setError('Recuperação indisponível para contas legadas — peça ao admin para resetar')
+      return
+    }
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(input)
+    if (resetError) {
+      setError(resetError.message)
+      return
+    }
+    setInfo('Se o email existir, enviaremos instruções de recuperação.')
+  }
+
   return (
     <div className="login-container">
       <div className="login-box">
@@ -52,12 +75,12 @@ export default function Login({ sessionExpired = false }: { sessionExpired?: boo
 
         <div className="login-form">
           <div className="login-field">
-            <label>Usuário</label>
+            <label>Usuário ou email</label>
             <input
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value.replace(/\s/g, ''))}
-              placeholder="seu usuário"
+              placeholder="usuário ou email@dominio.com"
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
             />
           </div>
@@ -73,10 +96,11 @@ export default function Login({ sessionExpired = false }: { sessionExpired?: boo
             />
           </div>
 
-          {sessionExpired && !error && (
+          {sessionExpired && !error && !info && (
             <p className="login-error">Sua sessão expirou. Faça login novamente.</p>
           )}
           {error && <p className="login-error">{error}</p>}
+          {info && <p className="login-info">{info}</p>}
 
           <button
             className="login-button"
@@ -84,6 +108,15 @@ export default function Login({ sessionExpired = false }: { sessionExpired?: boo
             disabled={loading}
           >
             {loading ? 'Entrando...' : 'Entrar'}
+          </button>
+
+          <button
+            type="button"
+            className="login-link"
+            onClick={handleResetPassword}
+            disabled={loading}
+          >
+            Esqueci minha senha
           </button>
         </div>
       </div>

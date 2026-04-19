@@ -4,20 +4,10 @@ import { pollOpenDeliveryEvents } from '../../lib/integrations/openDelivery'
 
 const POLL_INTERVAL_MS = 30_000
 
+import { PLATFORM_COLORS, PLATFORM_LABELS } from '../../lib/platformConfig'
+
 const OD_PLATFORMS = ['keeta', '99food', 'cardapio_web'] as const
 type OdPlatform = typeof OD_PLATFORMS[number]
-
-const PLATFORM_LABELS: Record<OdPlatform, string> = {
-  keeta:        'Keeta',
-  '99food':     '99Food',
-  cardapio_web: 'C.Web',
-}
-
-const PLATFORM_COLORS: Record<OdPlatform, string> = {
-  keeta:        '#27AE60',
-  '99food':     '#F5A623',
-  cardapio_web: '#8B5CF6',
-}
 
 interface PlatformStatus {
   lastSync:  Date | null

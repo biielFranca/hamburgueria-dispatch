@@ -107,3 +107,31 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.login-info {
+  font-size: 13px;
+  color: #6ee7b7;
+  margin: 0;
+  text-align: center;
+}
+
+.login-link {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 4px;
+  padding: 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.login-link:hover {
+  color: #ccc;
+}
+
+.login-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

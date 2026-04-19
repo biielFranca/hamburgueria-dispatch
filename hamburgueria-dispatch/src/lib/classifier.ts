@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { geocodeOrderAddress } from './geocoder'
 import { runRouteEngine } from './routeEngine'
+import { logOrderEvent } from './orderEvents'
 import type { Order, RouteEligibility } from '../types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -110,7 +111,7 @@ export async function classifyPendingOrders(storeId: string): Promise<void> {
 
     const result = classifyOrder(enrichedOrder)
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('orders')
       .update({
         route_eligibility:  result.route_eligibility,
@@ -119,6 +120,22 @@ export async function classifyPendingOrders(storeId: string): Promise<void> {
         ...(geocodedCoords ?? {}),
       })
       .eq('id', order.id)
+
+    if (!updateError) {
+      logOrderEvent({
+        orderId:   order.id,
+        storeId:   order.store_id,
+        eventType: 'classified',
+        actorType: 'system',
+        previous:  { status: order.status, route_eligibility: order.route_eligibility ?? null },
+        next: {
+          status:             result.status,
+          route_eligibility:  result.route_eligibility,
+          route_block_reason: result.route_block_reason,
+        },
+        metadata: geocodedCoords ? { geocoded: true } : null,
+      })
+    }
 
     if (result.status === 'awaiting_route') triggerEngine = true
   }

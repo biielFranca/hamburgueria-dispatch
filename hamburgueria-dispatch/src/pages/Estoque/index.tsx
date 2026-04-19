@@ -1,476 +1,417 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useStoreId } from '../../hooks/useStoreId'
+import type { InventoryItem, StockMovement, CatalogItem } from '../../types'
 import './Estoque.css'
+
+type Tab = 'stock' | 'movements' | 'recipes'
 
 const UNITS = ['un', 'kg', 'g', 'L', 'ml', 'cx', 'pct', 'dz']
 
-interface StockItem {
-  id: string
-  store_id: string
-  name: string
-  unit: string
-  quantity: number
-  min_quantity: number
-  created_at: string
-  updated_at: string
-}
-
-interface FormState {
-  name: string
-  unit: string
-  quantity: string
-  min_quantity: string
-}
-
-const EMPTY_FORM: FormState = { name: '', unit: 'un', quantity: '0', min_quantity: '0' }
-
-function parseNum(v: string) {
-  const n = parseFloat(v.replace(',', '.'))
-  return isNaN(n) ? 0 : n
-}
-
 function formatQty(v: number, unit: string) {
-  const str = Number.isInteger(v) ? String(v) : v.toFixed(3).replace(/\.?0+$/, '')
-  return `${str} ${unit}`
+  const s = Number.isInteger(v) ? String(v) : v.toFixed(3).replace(/\.?0+$/, '')
+  return `${s} ${unit}`
 }
 
-// ── Modal ────────────────────────────────────────────────────────────────────
+// ── Stock status badge ────────────────────────────────────────────────────────
 
-interface ItemModalProps {
-  open: boolean
-  editItem: StockItem | null
-  onClose: () => void
-  onSave: (form: FormState) => Promise<void>
+function StockBadge({ item }: { item: InventoryItem }) {
+  if (item.quantity <= 0)
+    return <span style={{ color: '#ef4444', fontSize: 11, fontWeight: 600 }}>● Ruptura</span>
+  if (item.quantity <= item.min_quantity)
+    return <span style={{ color: '#f59e0b', fontSize: 11, fontWeight: 600 }}>● Crítico</span>
+  return <span style={{ color: '#22c55e', fontSize: 11 }}>● OK</span>
 }
 
-function ItemModal({ open, editItem, onClose, onSave }: ItemModalProps) {
-  const [form, setForm]       = useState<FormState>(EMPTY_FORM)
-  const [saving, setSaving]   = useState(false)
-  const [error, setError]     = useState('')
-  const [visible, setVisible] = useState(false)
+// ── Item modal ────────────────────────────────────────────────────────────────
+
+interface ItemFormState { name: string; unit: string; quantity: string; min_quantity: string }
+const EMPTY_ITEM: ItemFormState = { name: '', unit: 'un', quantity: '0', min_quantity: '0' }
+
+function parseNum(v: string) { const n = parseFloat(v.replace(',', '.')); return isNaN(n) ? 0 : n }
+
+function ItemModal({ open, item, onClose, onSave }: {
+  open: boolean; item: InventoryItem | null
+  onClose: () => void; onSave: (f: ItemFormState) => Promise<void>
+}) {
+  const [form, setForm]   = useState<ItemFormState>(EMPTY_ITEM)
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState('')
 
   useEffect(() => {
-    if (open) {
-      setForm(editItem ? {
-        name:         editItem.name,
-        unit:         editItem.unit,
-        quantity:     String(editItem.quantity),
-        min_quantity: String(editItem.min_quantity),
-      } : EMPTY_FORM)
-      setError('')
-      setSaving(false)
-      requestAnimationFrame(() => setVisible(true))
-    } else {
-      setVisible(false)
-    }
-  }, [open, editItem])
+    if (open) setForm(item ? {
+      name: item.name, unit: item.unit,
+      quantity: String(item.quantity), min_quantity: String(item.min_quantity),
+    } : EMPTY_ITEM)
+    setError('')
+  }, [open, item])
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', h)
-    return () => document.removeEventListener('keydown', h)
+    document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h)
   }, [onClose])
 
-  if (!open && !visible) return null
+  if (!open) return null
 
-  async function handleSubmit() {
+  async function submit() {
     if (!form.name.trim()) { setError('Nome obrigatório'); return }
-    setSaving(true)
-    setError('')
-    try {
-      await onSave(form)
-      onClose()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-      setSaving(false)
-    }
+    setSaving(true); setError('')
+    try { await onSave(form); onClose() }
+    catch (e: any) { setError(e.message ?? 'Erro ao salvar') }
+    finally { setSaving(false) }
   }
 
   return (
-    <div className={`estoque-overlay ${visible ? 'open' : ''}`} onClick={onClose}>
-      <div className="estoque-modal" onClick={e => e.stopPropagation()}>
-        <div className="estoque-modal-title">{editItem ? 'Editar item' : 'Novo item'}</div>
-
-        <div className="estoque-field">
-          <label>Nome do item</label>
-          <input
-            className="estoque-input"
-            value={form.name}
-            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            maxLength={100}
-            placeholder="Ex: Pão de hambúrguer"
-            autoFocus
-          />
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span>{item ? 'Editar insumo' : 'Novo insumo'}</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-
-        <div className="estoque-field-row">
-          <div className="estoque-field">
-            <label>Unidade</label>
-            <select
-              className="estoque-select"
-              value={form.unit}
-              onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}
-            >
+        <div className="modal-body">
+          <label>Nome *<input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></label>
+          <label>Unidade
+            <select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}>
               {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
-          </div>
-          <div className="estoque-field">
-            <label>Quantidade atual</label>
-            <input
-              className="estoque-input"
-              value={form.quantity}
-              onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
-              placeholder="0"
-            />
-          </div>
-          <div className="estoque-field">
-            <label>Estoque mínimo</label>
-            <input
-              className="estoque-input"
-              value={form.min_quantity}
-              onChange={e => setForm(f => ({ ...f, min_quantity: e.target.value }))}
-              placeholder="0"
-            />
-          </div>
+          </label>
+          <label>Saldo inicial
+            <input value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
+          </label>
+          <label>Nível mínimo (alerta)
+            <input value={form.min_quantity} onChange={e => setForm(f => ({ ...f, min_quantity: e.target.value }))} />
+          </label>
+          {error && <p className="form-error">{error}</p>}
         </div>
-
-        {error && <p className="estoque-error">{error}</p>}
-
-        <div className="estoque-modal-actions">
-          <button className="btn-estoque-cancel" onClick={onClose}>Cancelar</button>
-          <button className="btn-estoque-save" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Salvando...' : 'Salvar'}
-          </button>
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" onClick={submit} disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ── Adjust Modal (quick +/-) ─────────────────────────────────────────────────
+// ── Manual adjustment modal ───────────────────────────────────────────────────
 
-interface AdjustModalProps {
-  open: boolean
-  item: StockItem | null
-  onClose: () => void
-  onAdjust: (itemId: string, newQty: number) => Promise<void>
-}
+function AdjustModal({ item, storeId, onClose, onDone }: {
+  item: InventoryItem; storeId: string | null; onClose: () => void; onDone: () => void
+}) {
+  const [qty, setQty]     = useState('')
+  const [type, setType]   = useState<'manual_in' | 'manual_out' | 'adjustment' | 'waste'>('manual_in')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState('')
 
-function AdjustModal({ open, item, onClose, onAdjust }: AdjustModalProps) {
-  const [delta, setDelta]     = useState('')
-  const [mode, setMode]       = useState<'add' | 'sub'>('add')
-  const [saving, setSaving]   = useState(false)
-  const [error, setError]     = useState('')
-  const [visible, setVisible] = useState(false)
+  if (!item || !storeId) return null
 
-  useEffect(() => {
-    if (open) {
-      setDelta('')
-      setMode('add')
-      setError('')
-      setSaving(false)
-      requestAnimationFrame(() => setVisible(true))
-    } else {
-      setVisible(false)
-    }
-  }, [open])
-
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', h)
-    return () => document.removeEventListener('keydown', h)
-  }, [onClose])
-
-  if (!open && !visible || !item) return null
-
-  async function handleConfirm() {
-    if (!item) return
-    const d = parseNum(delta)
-    if (d <= 0) { setError('Valor deve ser maior que zero'); return }
-    const newQty = mode === 'add' ? item.quantity + d : Math.max(0, item.quantity - d)
-    setSaving(true)
-    setError('')
+  async function submit() {
+    const amount = parseNum(qty)
+    if (!amount) { setError('Quantidade inválida'); return }
+    const signed = type === 'manual_out' || type === 'waste' ? -Math.abs(amount) : Math.abs(amount)
+    setSaving(true); setError('')
     try {
-      await onAdjust(item.id, newQty)
-      onClose()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-      setSaving(false)
-    }
+      const { error: mvErr } = await supabase.from('stock_movements').insert({
+        store_id: storeId, inventory_item_id: item.id,
+        quantity: signed, movement_type: type,
+        notes: notes.trim() || null, actor_type: 'operator',
+      })
+      if (mvErr) throw new Error(mvErr.message)
+      await supabase.from('inventory_items')
+        .update({ quantity: item.quantity + signed, updated_at: new Date().toISOString() })
+        .eq('id', item.id)
+      onDone(); onClose()
+    } catch (e: any) { setError(e.message) }
+    finally { setSaving(false) }
   }
 
+  const typeLabels = { manual_in: 'Entrada', manual_out: 'Saída', adjustment: 'Ajuste', waste: 'Descarte' }
+
   return (
-    <div className={`estoque-overlay ${visible ? 'open' : ''}`} onClick={onClose}>
-      <div className="estoque-modal estoque-modal-sm" onClick={e => e.stopPropagation()}>
-        <div className="estoque-modal-title">Ajustar estoque</div>
-        <div className="estoque-adjust-name">{item.name}</div>
-        <div className="estoque-adjust-current">
-          Atual: <strong>{formatQty(item.quantity, item.unit)}</strong>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span>Ajuste — {item.name}</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-
-        <div className="estoque-adjust-mode">
-          <button
-            className={`estoque-mode-btn ${mode === 'add' ? 'active-add' : ''}`}
-            onClick={() => setMode('add')}
-          >
-            + Entrada
-          </button>
-          <button
-            className={`estoque-mode-btn ${mode === 'sub' ? 'active-sub' : ''}`}
-            onClick={() => setMode('sub')}
-          >
-            − Saída
-          </button>
+        <div className="modal-body">
+          <p style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>
+            Saldo atual: <strong style={{ color: '#ccc' }}>{formatQty(item.quantity, item.unit)}</strong>
+          </p>
+          <label>Tipo
+            <select value={type} onChange={e => setType(e.target.value as typeof type)}>
+              {Object.entries(typeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </label>
+          <label>Quantidade ({item.unit})
+            <input value={qty} onChange={e => setQty(e.target.value)} placeholder="0" />
+          </label>
+          <label>Observação
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Opcional…" />
+          </label>
+          {error && <p className="form-error">{error}</p>}
         </div>
-
-        <div className="estoque-field">
-          <label>Quantidade ({item.unit})</label>
-          <input
-            className="estoque-input"
-            value={delta}
-            onChange={e => setDelta(e.target.value)}
-            placeholder="0"
-            autoFocus
-          />
-        </div>
-
-        {error && <p className="estoque-error">{error}</p>}
-
-        <div className="estoque-modal-actions">
-          <button className="btn-estoque-cancel" onClick={onClose}>Cancelar</button>
-          <button className="btn-estoque-save" onClick={handleConfirm} disabled={saving}>
-            {saving ? 'Salvando...' : 'Confirmar'}
-          </button>
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" onClick={submit} disabled={saving}>{saving ? 'Salvando…' : 'Confirmar'}</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
-
-type StockFilter = 'all' | 'low' | 'ok'
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Estoque() {
-  const [items, setItems]           = useState<StockItem[]>([])
+  const { storeId } = useStoreId()
+  const [tab, setTab]               = useState<Tab>('stock')
+  const [items, setItems]           = useState<InventoryItem[]>([])
+  const [movements, setMovements]   = useState<(StockMovement & { item_name?: string })[]>([])
+  const [catalogs, setCatalogs]     = useState<CatalogItem[]>([])
+  const [recipes, setRecipes]       = useState<any[]>([])
   const [loading, setLoading]       = useState(true)
-  const [filter, setFilter]         = useState<StockFilter>('all')
-  const [search, setSearch]         = useState('')
   const [modalOpen, setModalOpen]   = useState(false)
-  const [editItem, setEditItem]     = useState<StockItem | null>(null)
-  const [adjustItem, setAdjustItem] = useState<StockItem | null>(null)
-  const [dbError, setDbError]       = useState('')
-  const storeIdRef = useRef<string | null>(null)
+  const [editItem, setEditItem]     = useState<InventoryItem | null>(null)
+  const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null)
+  const channelRef                  = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
+  const loadStock = useCallback(async () => {
+    if (!storeId) return
+    setLoading(true)
+    const { data } = await supabase.from('inventory_items')
+      .select('*').eq('store_id', storeId).order('name')
+    setItems(data ?? [])
+    setLoading(false)
+  }, [storeId])
+
+  const loadMovements = useCallback(async () => {
+    if (!storeId) return
+    const { data } = await supabase.from('stock_movements')
+      .select('*, inventory_items(name)')
+      .eq('store_id', storeId)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    setMovements((data ?? []).map((m: any) => ({ ...m, item_name: m.inventory_items?.name })))
+  }, [storeId])
+
+  const loadRecipes = useCallback(async () => {
+    if (!storeId) return
+    const [{ data: recipeData }, { data: catData }] = await Promise.all([
+      supabase.from('item_components').select('*, catalog_items(name), inventory_items(name, unit)').eq('store_id', storeId),
+      supabase.from('catalog_items').select('id, name').eq('store_id', storeId).eq('active', true),
+    ])
+    setRecipes(recipeData ?? [])
+    setCatalogs(catData ?? [])
+  }, [storeId])
 
   useEffect(() => {
-    async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) { setLoading(false); return }
-      storeIdRef.current = userData.store_id
-      await fetchItems(userData.store_id)
-    }
-    init()
-  }, [])
+    if (!storeId) return
+    loadStock()
+    loadMovements()
+    loadRecipes()
 
-  async function fetchItems(storeId?: string) {
-    const sid = storeId ?? storeIdRef.current
-    if (!sid) return
-    const { data, error } = await supabase
-      .from('stock_items').select('*').eq('store_id', sid).order('name')
-    if (error) {
-      setDbError('Tabela stock_items não encontrada. Rode a migration necessária.')
-      setLoading(false)
-      return
-    }
-    setItems((data ?? []) as StockItem[])
-    setLoading(false)
-  }
+    channelRef.current = supabase.channel(`estoque-${storeId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items', filter: `store_id=eq.${storeId}` }, loadStock)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements', filter: `store_id=eq.${storeId}` }, () => { loadMovements(); loadStock() })
+      .subscribe()
 
-  async function handleSave(form: FormState) {
-    const sid = storeIdRef.current
-    if (!sid) throw new Error('Loja não identificada')
-    const now = new Date().toISOString()
+    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current) }
+  }, [storeId, loadStock, loadMovements, loadRecipes])
+
+  async function saveItem(form: ItemFormState) {
+    if (!storeId) return
     const payload = {
-      store_id:     sid,
-      name:         form.name.trim(),
-      unit:         form.unit,
-      quantity:     parseNum(form.quantity),
-      min_quantity: parseNum(form.min_quantity),
-      updated_at:   now,
+      store_id: storeId, name: form.name.trim(), unit: form.unit,
+      quantity: parseNum(form.quantity), min_quantity: parseNum(form.min_quantity),
     }
     if (editItem) {
-      const { error } = await supabase.from('stock_items').update(payload).eq('id', editItem.id)
+      const { error } = await supabase.from('inventory_items').update(payload).eq('id', editItem.id)
       if (error) throw new Error(error.message)
     } else {
-      const { error } = await supabase.from('stock_items').insert({ ...payload, created_at: now })
+      const { error } = await supabase.from('inventory_items').insert(payload)
       if (error) throw new Error(error.message)
     }
-    await fetchItems()
+    await loadStock()
   }
 
-  async function handleAdjust(itemId: string, newQty: number) {
-    const { error } = await supabase
-      .from('stock_items')
-      .update({ quantity: newQty, updated_at: new Date().toISOString() })
-      .eq('id', itemId)
-    if (error) throw new Error(error.message)
-    await fetchItems()
+  async function deleteItem(id: string) {
+    if (!confirm('Remover insumo? Movimentos serão preservados.')) return
+    await supabase.from('inventory_items').delete().eq('id', id)
+    await loadStock()
   }
 
-  async function handleDelete(item: StockItem) {
-    await supabase.from('stock_items').delete().eq('id', item.id)
-    await fetchItems()
-  }
-
-  function stockStatus(item: StockItem): 'critical' | 'low' | 'ok' {
-    if (item.min_quantity <= 0) return 'ok'
-    if (item.quantity <= 0) return 'critical'
-    if (item.quantity <= item.min_quantity) return 'critical'
-    if (item.quantity <= item.min_quantity * 1.5) return 'low'
-    return 'ok'
-  }
-
-  const lowCount = items.filter(i => stockStatus(i) !== 'ok').length
-
-  const filtered = items.filter(item => {
-    if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false
-    if (filter === 'low' && stockStatus(item) === 'ok') return false
-    if (filter === 'ok'  && stockStatus(item) !== 'ok') return false
-    return true
-  })
-
-  if (loading) return <div className="estoque-panel"><div className="estoque-loading">Carregando...</div></div>
+  const criticalCount = items.filter(i => i.quantity <= i.min_quantity && i.quantity > 0).length
+  const ruptureCount  = items.filter(i => i.quantity <= 0).length
 
   return (
-    <div className="estoque-panel">
-      <div className="estoque-header">
-        <div>
-          <h1>Estoque</h1>
-          <span className="estoque-subtitle">
-            {items.length} item{items.length !== 1 ? 's' : ''}
-            {lowCount > 0 && <span className="estoque-alert-badge">{lowCount} com estoque baixo</span>}
-          </span>
+    <div className="estoque-page">
+      <div className="page-header">
+        <h1>Estoque</h1>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {ruptureCount > 0 && <span style={{ color: '#ef4444', fontSize: 12 }}>⚠ {ruptureCount} em ruptura</span>}
+          {criticalCount > 0 && <span style={{ color: '#f59e0b', fontSize: 12 }}>⚠ {criticalCount} crítico(s)</span>}
+          <button className="btn-primary" onClick={() => { setEditItem(null); setModalOpen(true) }}>+ Novo insumo</button>
         </div>
-        <button
-          className="btn-estoque-new"
-          onClick={() => { setEditItem(null); setModalOpen(true) }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Novo item
-        </button>
       </div>
 
-      {dbError ? (
-        <div className="estoque-db-error">{dbError}</div>
-      ) : (
-        <>
-          <div className="estoque-controls">
-            <input
-              className="estoque-search"
-              placeholder="Buscar item..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-            <div className="estoque-filter-tabs">
-              {(['all', 'low', 'ok'] as StockFilter[]).map(f => (
-                <button
-                  key={f}
-                  className={`estoque-filter-tab ${filter === f ? 'active' : ''}`}
-                  onClick={() => setFilter(f)}
-                >
-                  {{ all: 'Todos', low: 'Baixo', ok: 'OK' }[f]}
-                </button>
-              ))}
-            </div>
-          </div>
+      <div className="tab-bar">
+        {(['stock', 'movements', 'recipes'] as Tab[]).map(t => (
+          <button key={t} className={`tab-btn ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
+            {{ stock: 'Saldos', movements: 'Movimentos', recipes: 'Receitas' }[t]}
+          </button>
+        ))}
+      </div>
 
-          {filtered.length === 0 ? (
-            <div className="estoque-empty">
-              {items.length === 0
-                ? 'Nenhum item no estoque. Clique em "Novo item" para começar.'
-                : 'Nenhum item para os filtros selecionados.'}
-            </div>
-          ) : (
-            <div className="estoque-list">
-              {filtered.map(item => {
-                const status = stockStatus(item)
-                return (
-                  <div key={item.id} className={`estoque-row estoque-row-${status}`}>
-                    <div className={`estoque-row-indicator estoque-ind-${status}`} />
-                    <div className="estoque-row-info">
-                      <span className="estoque-row-name">{item.name}</span>
-                      <span className={`estoque-row-qty estoque-qty-${status}`}>
-                        {formatQty(item.quantity, item.unit)}
-                      </span>
-                      {item.min_quantity > 0 && (
-                        <span className="estoque-row-min">
-                          mín. {formatQty(item.min_quantity, item.unit)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="estoque-row-actions">
-                      <button
-                        className="btn-estoque-adjust"
-                        onClick={() => setAdjustItem(item)}
-                        title="Ajustar quantidade"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <line x1="12" y1="5" x2="12" y2="19"/>
-                          <polyline points="19 12 12 19 5 12"/>
-                        </svg>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ marginLeft: -6 }}>
-                          <line x1="12" y1="19" x2="12" y2="5"/>
-                          <polyline points="5 12 12 5 19 12"/>
-                        </svg>
-                      </button>
-                      <button
-                        className="btn-estoque-edit"
-                        onClick={() => { setEditItem(item); setModalOpen(true) }}
-                        title="Editar"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                        </svg>
-                      </button>
-                      <button
-                        className="btn-estoque-delete"
-                        onClick={() => handleDelete(item)}
-                        title="Remover"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <polyline points="3 6 5 6 21 6"/>
-                          <path d="M19 6l-1 14H6L5 6"/>
-                          <path d="M10 11v6M14 11v6"/>
-                          <path d="M9 6V4h6v2"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+      {tab === 'stock' && (
+        <div className="stock-table-wrapper">
+          {loading ? <div className="loading">Carregando…</div> : (
+            <table className="stock-table">
+              <thead>
+                <tr><th>Insumo</th><th>Unidade</th><th>Saldo</th><th>Mínimo</th><th>Status</th><th></th></tr>
+              </thead>
+              <tbody>
+                {items.map(item => (
+                  <tr key={item.id} className={item.quantity <= 0 ? 'row-rupture' : item.quantity <= item.min_quantity ? 'row-critical' : ''}>
+                    <td>{item.name}</td>
+                    <td>{item.unit}</td>
+                    <td style={{ fontWeight: 600 }}>{formatQty(item.quantity, item.unit)}</td>
+                    <td style={{ color: '#666' }}>{formatQty(item.min_quantity, item.unit)}</td>
+                    <td><StockBadge item={item} /></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn-sm" onClick={() => setAdjustItem(item)}>Ajustar</button>
+                        <button className="btn-sm" onClick={() => { setEditItem(item); setModalOpen(true) }}>Editar</button>
+                        <button className="btn-danger-sm" onClick={() => deleteItem(item.id)}>✕</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!items.length && (
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: '#555', padding: 24 }}>Nenhum insumo cadastrado</td></tr>
+                )}
+              </tbody>
+            </table>
           )}
-        </>
+        </div>
       )}
 
-      <ItemModal
-        open={modalOpen}
-        editItem={editItem}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSave}
-      />
-      <AdjustModal
-        open={adjustItem !== null}
-        item={adjustItem}
-        onClose={() => setAdjustItem(null)}
-        onAdjust={handleAdjust}
-      />
+      {tab === 'movements' && (
+        <div className="movements-list">
+          {movements.map(m => {
+            const isOut = m.quantity < 0
+            const typeLabel: Record<string, string> = {
+              sale: 'Venda', manual_in: 'Entrada', manual_out: 'Saída',
+              adjustment: 'Ajuste', waste: 'Descarte',
+            }
+            return (
+              <div key={m.id} className="movement-row">
+                <div style={{ flex: 1 }}>
+                  <span style={{ color: '#ccc', fontSize: 13 }}>{m.item_name ?? '—'}</span>
+                  <span style={{ color: '#666', fontSize: 11, marginLeft: 8 }}>{typeLabel[m.movement_type] ?? m.movement_type}</span>
+                  {m.notes && <span style={{ color: '#555', fontSize: 11, marginLeft: 8 }}>— {m.notes}</span>}
+                </div>
+                <span style={{ color: isOut ? '#ef4444' : '#22c55e', fontWeight: 600, fontSize: 13 }}>
+                  {isOut ? '' : '+'}{m.quantity}
+                </span>
+                <span style={{ color: '#555', fontSize: 11, marginLeft: 12 }}>
+                  {new Date(m.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            )
+          })}
+          {!movements.length && <div className="empty-state">Nenhum movimento registrado</div>}
+        </div>
+      )}
+
+      {tab === 'recipes' && (
+        <RecipesTab storeId={storeId} items={items} catalogs={catalogs} recipes={recipes} onReload={loadRecipes} />
+      )}
+
+      <ItemModal open={modalOpen} item={editItem} onClose={() => setModalOpen(false)} onSave={saveItem} />
+
+      {adjustItem && (
+        <AdjustModal
+          item={adjustItem} storeId={storeId}
+          onClose={() => setAdjustItem(null)}
+          onDone={() => { loadStock(); loadMovements() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Recipes tab ───────────────────────────────────────────────────────────────
+
+function RecipesTab({ storeId, items, catalogs, recipes, onReload }: {
+  storeId: string | null; items: InventoryItem[]
+  catalogs: CatalogItem[]; recipes: any[]; onReload: () => void
+}) {
+  const [form, setForm]     = useState({ catalog_item_id: '', inventory_item_id: '', quantity_used: '' })
+  const [saving, setSaving] = useState(false)
+
+  async function addComponent() {
+    if (!storeId || !form.catalog_item_id || !form.inventory_item_id) return
+    const qty = parseFloat(form.quantity_used.replace(',', '.'))
+    if (isNaN(qty) || qty <= 0) return
+    setSaving(true)
+    await supabase.from('item_components').insert({
+      store_id: storeId, catalog_item_id: form.catalog_item_id,
+      inventory_item_id: form.inventory_item_id, quantity_used: qty,
+    })
+    setForm(f => ({ ...f, quantity_used: '' })); setSaving(false); onReload()
+  }
+
+  async function removeComponent(id: string) {
+    await supabase.from('item_components').delete().eq('id', id)
+    onReload()
+  }
+
+  const itemMap = Object.fromEntries(items.map(i => [i.id, i]))
+  const catMap  = Object.fromEntries(catalogs.map(c => [c.id, c]))
+
+  return (
+    <div style={{ padding: '20px 0' }}>
+      <p style={{ color: '#888', fontSize: 12, marginBottom: 16 }}>
+        Defina quais insumos são consumidos quando um item do cardápio é vendido.
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <select value={form.catalog_item_id} onChange={e => setForm(f => ({ ...f, catalog_item_id: e.target.value }))} style={{ flex: 2, minWidth: 150 }}>
+          <option value="">— Item do cardápio —</option>
+          {catalogs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={form.inventory_item_id} onChange={e => setForm(f => ({ ...f, inventory_item_id: e.target.value }))} style={{ flex: 2, minWidth: 150 }}>
+          <option value="">— Insumo —</option>
+          {items.map(i => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
+        </select>
+        <input value={form.quantity_used} onChange={e => setForm(f => ({ ...f, quantity_used: e.target.value }))} placeholder="Qtd usada" style={{ width: 100 }} />
+        <button className="btn-primary" onClick={addComponent} disabled={saving}>+ Adicionar</button>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ color: '#666', textAlign: 'left' }}>
+            <th style={{ padding: '6px 8px' }}>Item do cardápio</th>
+            <th style={{ padding: '6px 8px' }}>Insumo</th>
+            <th style={{ padding: '6px 8px' }}>Qtd / venda</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {recipes.map(r => {
+            const inv = itemMap[r.inventory_item_id]
+            return (
+              <tr key={r.id} style={{ borderTop: '1px solid #222' }}>
+                <td style={{ padding: '6px 8px', color: '#ccc' }}>{catMap[r.catalog_item_id]?.name ?? r.catalog_items?.name ?? '—'}</td>
+                <td style={{ padding: '6px 8px', color: '#aaa' }}>{r.inventory_items?.name ?? inv?.name ?? '—'}</td>
+                <td style={{ padding: '6px 8px', color: '#aaa' }}>{r.quantity_used} {r.inventory_items?.unit ?? inv?.unit ?? ''}</td>
+                <td style={{ padding: '6px 8px' }}><button className="btn-danger-sm" onClick={() => removeComponent(r.id)}>✕</button></td>
+              </tr>
+            )
+          })}
+          {!recipes.length && (
+            <tr><td colSpan={4} style={{ padding: 16, color: '#555', textAlign: 'center' }}>Nenhuma receita cadastrada</td></tr>
+          )}
+        </tbody>
+      </table>
     </div>
   )
 }

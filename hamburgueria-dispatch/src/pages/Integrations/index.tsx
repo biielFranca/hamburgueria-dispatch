@@ -14,7 +14,17 @@ interface Integration {
   last_error: string | null
 }
 
-const PLATFORM_DEFS = [
+interface PlatformDef {
+  key: string
+  label: string
+  color: string
+  description: string
+  fields: { clientId: string; clientSecret: string }
+  docsUrl: string
+  disabled?: boolean
+}
+
+const PLATFORM_DEFS: PlatformDef[] = [
   {
     key: 'ifood',
     label: 'iFood',
@@ -50,7 +60,7 @@ const PLATFORM_DEFS = [
 ]
 
 interface CardProps {
-  def: typeof PLATFORM_DEFS[0]
+  def: PlatformDef
   integration: Integration | null
   storeId: string
   onSaved: () => void

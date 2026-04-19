@@ -70,9 +70,24 @@ async function playImmediate(level: AlertLevel): Promise<void> {
   }
 }
 
+// Single module-level AudioContext — Chromium caps concurrent contexts at 6
+// and creating a new one per beep leaks (close() is deferred via setTimeout
+// and fails if a new playback starts inside the window). One context, reused.
+let sharedCtx: AudioContext | null = null
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null
+  const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+        ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AC) return null
+  if (!sharedCtx || sharedCtx.state === 'closed') sharedCtx = new AC()
+  if (sharedCtx.state === 'suspended') { void sharedCtx.resume() }
+  return sharedCtx
+}
+
 function playFallback(level: AlertLevel) {
   try {
-    const ctx = new AudioContext()
+    const ctx = getAudioContext()
+    if (!ctx) return
 
     // Each level: array of { freq, vol, dur } pulses played in sequence
     // Minimum total duration: 5min ≥ 3s, 1min ≥ 4s, critical ≥ 5s
@@ -134,7 +149,7 @@ function playFallback(level: AlertLevel) {
       t += dur + gap
     }
 
-    setTimeout(() => ctx.close(), (t - ctx.currentTime + 1) * 1000)
+    // do NOT close — shared context is reused across plays
   } catch {
     // AudioContext unavailable — silently ignore
   }

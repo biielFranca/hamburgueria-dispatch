@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { Driver } from '../../types'
+import { formatLastSeen, isDriverOnline, toggleGpsEnabled } from '../../lib/driverGps'
 import './Drivers.css'
 
 // ── Confirm Delete Modal ──────────────────────────────────────────────────────
@@ -742,6 +743,43 @@ export default function Drivers() {
                 <span className={`driver-row-status ${driver.active ? 'active-badge' : 'inactive-badge'}`}>
                   {driver.active ? 'Ativo' : 'Inativo'}
                 </span>
+                <button
+                  onClick={async () => {
+                    await toggleGpsEnabled(driver.id, !driver.gps_enabled)
+                    await fetchDrivers()
+                  }}
+                  title={driver.gps_enabled
+                    ? `GPS ativo — ${formatLastSeen(driver)}`
+                    : 'Habilitar GPS (requer app do motoboy)'}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: '3px 8px',
+                    borderRadius: 10,
+                    border: '1px solid',
+                    borderColor: driver.gps_enabled
+                      ? (isDriverOnline(driver) ? '#14532d' : '#5a4a1b')
+                      : '#2a2a2a',
+                    background: driver.gps_enabled
+                      ? (isDriverOnline(driver) ? '#0f2a18' : '#2a220e')
+                      : '#171717',
+                    color: driver.gps_enabled
+                      ? (isDriverOnline(driver) ? '#4ade80' : '#fbbf24')
+                      : '#666',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: '50%',
+                    background: 'currentColor',
+                  }} />
+                  GPS {driver.gps_enabled ? formatLastSeen(driver) : 'off'}
+                </button>
                 <div className="driver-row-actions">
                   <button
                     className={`btn-toggle-driver ${!driver.active ? 'activate' : ''}`}
