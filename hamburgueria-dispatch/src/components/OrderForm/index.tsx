@@ -2,21 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fetchAddressByCep } from '../../lib/cep'
 import type { DeliveryType, LogisticsType, OrderItem, Platform } from '../../types'
+import { PLATFORM_COLORS, PLATFORM_LABELS_SHORT } from '../../lib/platformConfig'
 import './OrderForm.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const PLATFORMS: { key: Platform; label: string; color: string }[] = [
-  { key: 'ifood',        label: 'iFood',   color: '#EA1D2C' },
-  { key: 'keeta',        label: 'Keeta',   color: '#27AE60' },
-  { key: '99food',       label: '99Food',  color: '#F5A623' },
-  { key: 'cardapio_web', label: 'Cárd.Web',color: '#8B5CF6' },
-]
+const PLATFORMS: { key: Platform; label: string; color: string }[] = (
+  Object.keys(PLATFORM_COLORS) as Platform[]
+).map(key => ({ key, label: PLATFORM_LABELS_SHORT[key], color: PLATFORM_COLORS[key] }))
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ItemDraft {
-  id: number
+  id: string
   name: string
   quantity: string
   unit_price: string
@@ -54,8 +52,11 @@ function formatCurrency(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 }
 
-function uid(): number {
-  return Date.now() + Math.random()
+function uid(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+  return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 function emptyItem(): ItemDraft {
@@ -206,7 +207,7 @@ export default function OrderForm({ open, onClose, onCreated }: OrderFormProps) 
     setCepLoading(false)
   }
 
-  function setItem(id: number, field: keyof ItemDraft, value: string) {
+  function setItem(id: string, field: keyof ItemDraft, value: string) {
     setForm(f => ({
       ...f,
       items: f.items.map(it => it.id === id ? { ...it, [field]: value } : it),
@@ -217,7 +218,7 @@ export default function OrderForm({ open, onClose, onCreated }: OrderFormProps) 
     setForm(f => ({ ...f, items: [...f.items, emptyItem()] }))
   }
 
-  function removeItem(id: number) {
+  function removeItem(id: string) {
     setForm(f => ({
       ...f,
       items: f.items.length > 1 ? f.items.filter(it => it.id !== id) : f.items,

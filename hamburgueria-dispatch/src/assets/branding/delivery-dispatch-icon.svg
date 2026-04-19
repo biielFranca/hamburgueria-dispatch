@@ -1,0 +1,41 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="dd-speed" x1="52" y1="0" x2="146" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4FC3F7"/>
+      <stop offset="0.55" stop-color="#1E88E5"/>
+      <stop offset="1" stop-color="#0D47A1"/>
+    </linearGradient>
+    <linearGradient id="dd-visor" x1="0" y1="0" x2="38" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4FC3F7"/>
+      <stop offset="1" stop-color="#1565C0"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(0,-4)">
+    <rect x="40" y="108" width="56" height="10" rx="5" fill="url(#dd-speed)"/>
+    <rect x="30" y="129" width="66" height="10" rx="5" fill="url(#dd-speed)"/>
+    <rect x="46" y="150" width="50" height="10" rx="5" fill="url(#dd-speed)"/>
+
+    <rect x="74" y="78" width="34" height="30" rx="4" stroke="#0A1220" stroke-width="4"/>
+    <path d="M84 78V82H98V78" stroke="#0A1220" stroke-width="3" stroke-linecap="round"/>
+
+    <circle cx="106" cy="153" r="20" stroke="#0A1220" stroke-width="5"/>
+    <circle cx="106" cy="153" r="7" fill="#0A1220"/>
+    <circle cx="176" cy="153" r="20" stroke="#0A1220" stroke-width="5"/>
+    <circle cx="176" cy="153" r="7" fill="#0A1220"/>
+
+    <path d="M90 153H176" stroke="#0A1220" stroke-width="5" stroke-linecap="round"/>
+    <path d="M90 151C90 135 99 122 113 120H132C147 120 151 128 151 142V152H90Z" stroke="#0A1220" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M151 153C157 151 164 145 164 137V119L176 101L186 101L191 136C193 142 194 146 197 151C199 155 201 158 202 153" stroke="#0A1220" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <circle cx="136" cy="47" r="18" stroke="#0A1220" stroke-width="5"/>
+    <path d="M136 44C145 46 152 49 157 53C155 56 153 59 152 62C146 62 140 61 134 58C131 57 128 55 127 53C128 49 131 46 136 44Z" fill="url(#dd-visor)"/>
+    <path d="M124 120C125 105 128 89 138 72C144 63 151 58 159 58" stroke="#0A1220" stroke-width="5" stroke-linecap="round"/>
+    <path d="M134 78C142 88 147 94 154 99" stroke="#0A1220" stroke-width="4" stroke-linecap="round"/>
+
+    <path d="M168 100L180 99" stroke="#0A1220" stroke-width="5" stroke-linecap="round"/>
+    <path d="M180 99C186 96 188 95 194 94V112C188 112 186 111 180 108V99Z" stroke="#0A1220" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M50 173H188" stroke="#0A1220" stroke-width="5" stroke-linecap="round"/>
+  </g>
+</svg>
+

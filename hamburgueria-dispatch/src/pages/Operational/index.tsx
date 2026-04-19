@@ -1,18 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { confirmIfoodDispatch } from '../../lib/integrations/ifood'
+import { confirmOpenDeliveryDispatch } from '../../lib/integrations/openDelivery'
+import { fetchRouteGeometry, findOptimalSequence } from '../../lib/routeEngine'
+import { logOrderEvent } from '../../lib/orderEvents'
 import type { Driver, Order, Platform, Store } from '../../types'
+import { PLATFORM_COLORS } from '../../lib/platformConfig'
 import OperationalMap, { DISPATCH_GHOST_MS } from './OperationalMap'
-import type { OrderMarkerState } from './OperationalMap'
+import type { HighlightFinalized, OrderMarkerState } from './OperationalMap'
 import './Operational.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const PLATFORM_COLORS: Record<Platform, string> = {
-  ifood:        '#EA1D2C',
-  keeta:        '#27AE60',
-  '99food':     '#F5A623',
-  cardapio_web: '#8B5CF6',
-}
+const MARKER_STATUS_COLORS = {
+  outsideSuggestion:  'rgba(148, 163, 184, 0.38)',
+  pendingSuggestion:  'rgba(96, 165, 250, 0.42)',
+  selectedSuggestion: 'rgba(250, 204, 21, 0.5)',
+  recentlyDispatched: 'rgba(74, 222, 128, 0.42)',
+  ghost:              'rgba(255, 255, 255, 0.14)',
+  driverFocus:        '#22d3ee',
+} as const
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -36,6 +43,25 @@ interface InProgressEntry {
   driverName: string
   predictedEta: number | null
   stopCount: number
+}
+
+interface FinalizedEntry {
+  id: string
+  code: string
+  driverId: string | null
+  customerName: string
+  driverName: string | null
+  status: string
+  totalAmount: number
+  platform: Platform
+  dispatchedAt: string | null
+  latitude: number | null
+  longitude: number | null
+  addressStreet:       string | null
+  addressNumber:       string | null
+  addressNeighborhood: string | null
+  addressCity:         string | null
+  addressZip:          string | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -94,11 +120,12 @@ interface SuggestionBlockProps {
   onDriverChange: (id: string) => void
   onAccept:       () => void
   onReject:       () => void
+  onEdit:         () => void
 }
 
 function SuggestionBlock({
   suggestion, drivers, isSelected, driverValue, loading,
-  onSelect, onDriverChange, onAccept, onReject,
+  onSelect, onDriverChange, onAccept, onReject, onEdit,
 }: SuggestionBlockProps) {
   const total = suggestion.orders.reduce((s, o) => s + o.total_amount, 0)
   const shortId = suggestion.id.slice(0, 8).toUpperCase()
@@ -116,14 +143,15 @@ function SuggestionBlock({
           <span className="sug-version">v{suggestion.suggestion_version}</span>
         </div>
         <div className="sug-header-right">
-          {suggestion.predicted_eta != null && (
-            <span className="sug-eta">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-              {suggestion.predicted_eta} min
-            </span>
-          )}
+          <span className="sug-eta">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            {suggestion.predicted_eta != null
+              ? `${suggestion.predicted_eta} min`
+              : `~${suggestion.orders.length * 15} min`
+            }
+          </span>
           <span className="sug-stops-badge">
             {suggestion.orders.length} {suggestion.orders.length === 1 ? 'parada' : 'paradas'}
           </span>
@@ -172,8 +200,7 @@ function SuggestionBlock({
           <button
             className="btn-sug-edit"
             disabled={loading}
-            onClick={() => { /* TODO: edit modal */ }}
-            title="Em breve"
+            onClick={e => { e.stopPropagation(); onEdit() }}
           >
             Editar
           </button>
@@ -227,21 +254,43 @@ export default function Operational() {
   const [orders, setOrders]               = useState<Order[]>([])
   const [suggestions, setSuggestions]     = useState<SuggestionRow[]>([])
   const [drivers, setDrivers]             = useState<Driver[]>([])
-  const [selectedSuggId, setSelectedSuggId] = useState<string | null>(null)
-  const [activeTab, setActiveTab]         = useState<'suggestions' | 'inprogress'>('suggestions')
+  const [selectedSuggId, setSelectedSuggId]           = useState<string | null>(null)
+  const [selectedFinalizedId, setSelectedFinalizedId] = useState<string | null>(null)
+  const [geocodingId, setGeocodingId]                 = useState<string | null>(null)
+  const [geocodedCoords, setGeocodedCoords]           = useState<Record<string, [number, number]>>({})
+  const [activeTab, setActiveTab]                     = useState<'suggestions' | 'inprogress' | 'finalized'>('suggestions')
+  const [finalized, setFinalized]         = useState<FinalizedEntry[]>([])
   const [driverSelections, setDriverSelections] = useState<Record<string, string>>({})
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null)
+  const [driverFilterOpen, setDriverFilterOpen] = useState(false)
+  const [orderDriverMap, setOrderDriverMap] = useState<Record<string, string>>({})
   const [inProgress, setInProgress]       = useState<InProgressEntry[]>([])
   const [loadingAction, setLoadingAction] = useState<string | null>(null) // suggestionId being acted upon
+  const [editingSuggId, setEditingSuggId] = useState<string | null>(null)
   const [loading, setLoading]             = useState(true)
   const [popupOrderId, setPopupOrderId]   = useState<string | null>(null)
   const storeIdRef                        = useRef<string | null>(null)
+  const driverFilterRef                   = useRef<HTMLDivElement | null>(null)
+  // Monotonic generation counter — guards enrichment race: only the last
+  // fetchAll() caller is allowed to commit state. Stale replies drop silently.
+  const fetchGenRef                       = useRef(0)
   const [tick, setTick]                   = useState(0)
 
-  // Tick every second for countdown + ghost cleanup
+  // Event-driven tick: only schedule a re-render at the exact moment an order
+  // transitions from "recently dispatched" to "ghost". Previously ran every
+  // 1s regardless of state, costing 60 renders/min even when nothing changed.
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000)
-    return () => clearInterval(id)
-  }, [])
+    const now = Date.now()
+    const upcomingTransitions = orders
+      .filter(o => o.status === 'dispatched' && o.dispatched_at)
+      .map(o => new Date(o.dispatched_at!).getTime() + DISPATCH_GHOST_MS)
+      .filter(t => t > now)
+    if (upcomingTransitions.length === 0) return
+    const soonest = Math.min(...upcomingTransitions)
+    const delay = Math.max(soonest - now, 100)
+    const id = setTimeout(() => setTick(t => t + 1), delay)
+    return () => clearTimeout(id)
+  }, [orders, tick])
 
   // Ghost cleanup: remove in-progress entries older than DISPATCH_GHOST_MS
   useEffect(() => {
@@ -251,6 +300,19 @@ export default function Operational() {
       setInProgress(prev => prev.filter(e => Date.now() - e.dispatchedAt < DISPATCH_GHOST_MS))
     }
   }, [tick]) // eslint-disable-line
+
+  useEffect(() => {
+    if (!driverFilterOpen) return
+    function handleOutsideClick(e: MouseEvent) {
+      const target = e.target as Node | null
+      if (!target) return
+      if (driverFilterRef.current && !driverFilterRef.current.contains(target)) {
+        setDriverFilterOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [driverFilterOpen])
 
   // ── Data fetching ───────────────────────────────────────────────────────────
 
@@ -265,8 +327,11 @@ export default function Operational() {
     }
 
     const sid = storeIdRef.current!
+    const myGen = ++fetchGenRef.current
 
-    const [storeRes, driversRes, ordersRes, suggestionsRes] = await Promise.all([
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+    const [storeRes, driversRes, ordersRes, suggestionsRes, finalizedRes] = await Promise.all([
       supabase.from('stores').select('*').eq('id', sid).single(),
       supabase.from('drivers').select('*').eq('store_id', sid).eq('active', true).order('name'),
       supabase.from('orders').select('*')
@@ -274,48 +339,214 @@ export default function Operational() {
         .not('status', 'in', '("delivered","cancelled")')
         .order('rejection_count', { ascending: false })
         .order('created_at', { ascending: false }),
-      supabase.from('dispatch_suggestions').select('*')
+      // Single-query JOIN: suggestions + their orders via the FK
+      // dispatch_suggestion_orders.suggestion_id. Cuts 2 round-trips.
+      supabase.from('dispatch_suggestions')
+        .select('*, dispatch_suggestion_orders(position, order:orders(*))')
         .eq('store_id', sid)
         .eq('status', 'pending_review')
         .order('created_at', { ascending: false }),
+      supabase.from('orders').select('*')
+        .eq('store_id', sid)
+        .in('status', ['dispatched', 'delivered', 'cancelled'])
+        .gte('updated_at', since24h)
+        .order('updated_at', { ascending: false })
+        .limit(100),
     ])
 
     const fetchedOrders  = (ordersRes.data ?? []) as Order[]
-    const rawSuggestions = suggestionsRes.data ?? []
+    const rawSuggestions = (suggestionsRes.data ?? []) as Array<
+      Record<string, unknown> & {
+        suggested_sequence: string[]
+        dispatch_suggestion_orders?: Array<{ position: number; order: Order | null }>
+      }
+    >
 
-    // Enrich suggestions with their orders
-    const allSeqIds = [...new Set(rawSuggestions.flatMap(s => s.suggested_sequence as string[]))]
-    let seqOrders: Order[] = []
-    if (allSeqIds.length > 0) {
-      const { data } = await supabase.from('orders').select('*').in('id', allSeqIds)
-      seqOrders = (data ?? []) as Order[]
+    // Build per-suggestion order lookup from the embedded JOIN. Falls back
+    // to an empty list if FK embed returned nothing (keeps render safe).
+    const enriched: SuggestionRow[] = rawSuggestions.map(s => {
+      const joined = s.dispatch_suggestion_orders ?? []
+      const byId = new Map<string, Order>()
+      for (const row of joined) {
+        if (row.order) byId.set(row.order.id, row.order)
+      }
+      const ordered = (s.suggested_sequence ?? [])
+        .map(id => byId.get(id))
+        .filter(Boolean) as Order[]
+      // Drop the embedded join field from the row we surface to UI
+      const { dispatch_suggestion_orders: _omit, ...rest } = s
+      return { ...(rest as Record<string, unknown>), orders: ordered } as SuggestionRow
+    })
+
+    // ── Driver by order map (for finalized list + map highlight) ───────────
+    const finalizedOrders = (finalizedRes.data ?? []) as Order[]
+    const allRelevantOrderIds = [
+      ...new Set([...fetchedOrders, ...finalizedOrders].map(o => o.id)),
+    ]
+    const driverIdByOrderId: Record<string, string> = {}
+    const driverNameByOrderId: Record<string, string> = {}
+
+    if (allRelevantOrderIds.length > 0) {
+      const { data: suggLinks } = await supabase
+        .from('dispatch_suggestion_orders')
+        .select('order_id, suggestion_id')
+        .in('order_id', allRelevantOrderIds)
+
+      if (suggLinks?.length) {
+        const suggIds = [...new Set(suggLinks.map(l => l.suggestion_id as string))]
+        const { data: dispatched } = await supabase
+          .from('dispatch_suggestions')
+          .select('id, assigned_driver_id')
+          .in('id', suggIds)
+          .not('assigned_driver_id', 'is', null)
+
+        const suggToDriver = new Map((dispatched ?? []).map(s => [s.id, s.assigned_driver_id as string]))
+        const allDriverIds = [...new Set((dispatched ?? []).map(s => s.assigned_driver_id as string))]
+        const driverNameMap = new Map<string, string>()
+
+        if (allDriverIds.length > 0) {
+          const { data: driverRows } = await supabase
+            .from('drivers')
+            .select('id, name')
+            .in('id', allDriverIds)
+          for (const d of (driverRows ?? [])) {
+            driverNameMap.set(d.id, d.name)
+          }
+        }
+
+        for (const link of suggLinks) {
+          const driverId = suggToDriver.get(link.suggestion_id)
+          if (!driverId) continue
+          driverIdByOrderId[link.order_id] = driverId
+          if (driverNameMap.has(driverId)) {
+            driverNameByOrderId[link.order_id] = driverNameMap.get(driverId)!
+          }
+        }
+      }
     }
 
-    const enriched: SuggestionRow[] = rawSuggestions.map(s => ({
-      ...s,
-      orders: (s.suggested_sequence as string[])
-        .map(id => seqOrders.find(o => o.id === id))
-        .filter(Boolean) as Order[],
+    const finalizedEntries: FinalizedEntry[] = finalizedOrders.map(o => ({
+      id:          o.id,
+      code:        o.platform_order_code ?? `#${o.id.slice(0, 6).toUpperCase()}`,
+      driverId:    driverIdByOrderId[o.id] ?? null,
+      customerName: o.customer_name,
+      driverName:  driverNameByOrderId[o.id] ?? null,
+      status:      o.status,
+      totalAmount: o.total_amount,
+      platform:    o.platform,
+      dispatchedAt: o.dispatched_at ?? null,
+      latitude:    o.latitude ?? null,
+      longitude:   o.longitude ?? null,
+      addressStreet:       o.address_street ?? null,
+      addressNumber:       o.address_number ?? null,
+      addressNeighborhood: o.address_neighborhood ?? null,
+      addressCity:         o.address_city ?? null,
+      addressZip:          o.address_zip ?? null,
     }))
+
+    // Race guard: a newer fetchAll() started after us — its result will be
+    // the truth. Drop our stale snapshot to avoid flicker / wrong sequence.
+    if (myGen !== fetchGenRef.current) return
 
     setStore((storeRes.data ?? null) as Store | null)
     setDrivers((driversRes.data ?? []) as Driver[])
     setOrders(fetchedOrders)
     setSuggestions(enriched)
+    setOrderDriverMap(driverIdByOrderId)
+    setFinalized(finalizedEntries)
     setLoading(false)
+  }
+
+  async function geocodeEntry(entry: FinalizedEntry): Promise<[number, number] | null> {
+    const queries: string[] = []
+    if (entry.addressZip) {
+      queries.push(`${entry.addressZip}, Brasil`)
+    }
+    const parts = [entry.addressStreet, entry.addressNumber, entry.addressNeighborhood, entry.addressCity]
+      .filter(Boolean)
+    if (parts.length >= 2) {
+      queries.push(`${parts.join(', ')}, Brasil`)
+    }
+    for (const q of queries) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=br`,
+          { headers: { 'Accept': 'application/json' } },
+        )
+        const data = await res.json()
+        if (data?.[0]?.lat && data?.[0]?.lon) {
+          return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
+        }
+      } catch { /* try next query */ }
+    }
+    return null
+  }
+
+  async function handleFinalizedClick(entry: FinalizedEntry) {
+    if (selectedFinalizedId === entry.id) {
+      setSelectedFinalizedId(null)
+      return
+    }
+    const cached = geocodedCoords[entry.id]
+    if ((entry.latitude != null && entry.longitude != null) || cached) {
+      setSelectedFinalizedId(entry.id)
+      return
+    }
+    setGeocodingId(entry.id)
+    const coord = await geocodeEntry(entry)
+    setGeocodingId(null)
+    if (coord) {
+      setGeocodedCoords(prev => ({ ...prev, [entry.id]: coord }))
+      setSelectedFinalizedId(entry.id)
+    }
   }
 
   useEffect(() => {
     fetchAll()
 
+    // Coalesce realtime bursts: many postgres_changes events arriving in a
+    // short window trigger only ONE fetchAll. Prevents rebuilding state 5+
+    // times in a row when a suggestion touches orders + suggestions + drivers.
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    let inFlight = false
+    let pendingWhileInFlight = false
+
+    async function scheduleFetch() {
+      if (inFlight) {
+        pendingWhileInFlight = true
+        return
+      }
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(async () => {
+        inFlight = true
+        try {
+          await fetchAll()
+        } finally {
+          inFlight = false
+          if (pendingWhileInFlight) {
+            pendingWhileInFlight = false
+            scheduleFetch()
+          }
+        }
+      }, 300)
+    }
+
     const channel = supabase
       .channel('op-main')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatch_suggestions' }, fetchAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, fetchAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, scheduleFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatch_suggestions' }, scheduleFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, scheduleFetch)
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // Poll fallback: refreshes panel even when Realtime events don't fire
+    // (Supabase requires REPLICA IDENTITY FULL for reliable change events)
+    const pollTimer = setInterval(fetchAll, 10_000)
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      supabase.removeChannel(channel)
+      clearInterval(pollTimer)
+    }
   }, []) // eslint-disable-line
 
   // ── Actions ─────────────────────────────────────────────────────────────────
@@ -342,6 +573,38 @@ export default function Operational() {
       }).in('id', orderIds),
     ])
 
+    // Audit: one 'dispatched' event per order
+    for (const order of suggestion.orders) {
+      logOrderEvent({
+        orderId:   order.id,
+        storeId:   order.store_id,
+        eventType: 'dispatched',
+        actorType: 'operator',
+        previous:  { status: order.status },
+        next:      { status: 'dispatched', dispatched_at: now },
+        metadata: {
+          suggestion_id: suggestion.id,
+          driver_id:     driverId,
+          driver_name:   driver?.name ?? null,
+          stop_count:    suggestion.orders.length,
+        },
+      })
+    }
+
+    // Notify platforms — best-effort, never block the UI on failure
+    for (const order of suggestion.orders) {
+      if (order.platform === 'ifood') {
+        confirmIfoodDispatch(order.platform_order_id).catch(e =>
+          console.warn('[Dispatch] iFood confirm failed:', e),
+        )
+      } else if (order.platform === '99food' || order.platform === 'cardapio_web') {
+        confirmOpenDeliveryDispatch(order.platform, order.platform_order_id).catch(e =>
+          console.warn(`[Dispatch] ${order.platform} confirm failed:`, e),
+        )
+        // keeta: always platform-managed logistics, never reaches dispatch queue
+      }
+    }
+
     // Add to in-progress tab
     setInProgress(prev => [...prev, {
       suggestionId:    suggestion.id,
@@ -359,9 +622,25 @@ export default function Operational() {
     await fetchAll()
   }
 
-  async function handleReject(suggestion: SuggestionRow) {
+  async function handleBulkReject() {
+    if (suggestions.length < 2) return
+    const ok = window.confirm(
+      `Recusar todas as ${suggestions.length} sugestões pendentes? Os pedidos voltam à fila.`,
+    )
+    if (!ok) return
+
+    setLoadingAction('__bulk__')
+    for (const s of suggestions) {
+      // reuse single handler to keep audit/logic consistent
+      await handleReject(s, true)
+    }
+    setLoadingAction(null)
+    await fetchAll()
+  }
+
+  async function handleReject(suggestion: SuggestionRow, skipRefresh = false) {
     const now = new Date().toISOString()
-    setLoadingAction(suggestion.id)
+    if (!skipRefresh) setLoadingAction(suggestion.id)
 
     await supabase.from('dispatch_suggestions').update({
       status: 'rejected',
@@ -374,10 +653,92 @@ export default function Operational() {
         status:          'awaiting_route',
         rejection_count: (order.rejection_count ?? 0) + 1,
       }).eq('id', order.id)
+
+      logOrderEvent({
+        orderId:   order.id,
+        storeId:   order.store_id,
+        eventType: 'rejected',
+        actorType: 'operator',
+        previous:  { status: order.status, rejection_count: order.rejection_count ?? 0 },
+        next:      { status: 'awaiting_route', rejection_count: (order.rejection_count ?? 0) + 1 },
+        metadata:  { suggestion_id: suggestion.id },
+      })
     }
 
     if (selectedSuggId === suggestion.id) setSelectedSuggId(null)
-    setLoadingAction(null)
+    if (!skipRefresh) {
+      setLoadingAction(null)
+      await fetchAll()
+    }
+  }
+
+  async function handleEditSave(suggestionId: string, newSequence: Order[]) {
+    const suggestion = suggestions.find(s => s.id === suggestionId)
+    if (!suggestion) return
+
+    const oldIds = new Set(suggestion.orders.map(o => o.id))
+    const newIds = new Set(newSequence.map(o => o.id))
+
+    // Orders removed from this suggestion → back to awaiting_route with priority boost
+    const removedOrders = suggestion.orders.filter(o => !newIds.has(o.id))
+
+    // Orders added that were in_suggestion in another pending suggestion → steal them
+    const addedOrders = newSequence.filter(o => !oldIds.has(o.id))
+    for (const addedOrder of addedOrders) {
+      const otherSugg = suggestions.find(
+        s => s.id !== suggestionId && s.orders.some(o => o.id === addedOrder.id),
+      )
+      if (otherSugg) {
+        const remaining = otherSugg.orders.filter(o => o.id !== addedOrder.id)
+        await supabase.from('dispatch_suggestions').update({
+          status: 'rejected',
+          reviewed_at: new Date().toISOString(),
+        }).eq('id', otherSugg.id)
+        for (const o of remaining) {
+          await supabase.from('orders').update({
+            status: 'awaiting_route',
+            rejection_count: (o.rejection_count ?? 0) + 1,
+          }).eq('id', o.id)
+        }
+      }
+    }
+
+    // Return removed orders to the queue with priority boost
+    for (const o of removedOrders) {
+      await supabase.from('orders').update({
+        status: 'awaiting_route',
+        rejection_count: (o.rejection_count ?? 0) + 1,
+      }).eq('id', o.id)
+    }
+
+    // Mark all orders in the new sequence as in_suggestion
+    if (newSequence.length > 0) {
+      await supabase.from('orders').update({ status: 'in_suggestion' })
+        .in('id', newSequence.map(o => o.id))
+    }
+
+    // Recalculate ETA via OSRM for the new sequence
+    let newEta: number | null = null
+    const storeCoord = store?.latitude != null && store?.longitude != null
+      ? [store.latitude, store.longitude] as [number, number]
+      : null
+    if (storeCoord && newSequence.every(o => o.latitude != null && o.longitude != null)) {
+      try {
+        const { durationSeconds } = await findOptimalSequence(storeCoord, newSequence)
+        newEta = durationSeconds ? Math.round(durationSeconds / 60) : null
+      } catch {
+        newEta = null
+      }
+    }
+
+    // Update the suggestion with new sequence, bumped version and recalculated ETA
+    await supabase.from('dispatch_suggestions').update({
+      suggested_sequence: newSequence.map(o => o.id),
+      suggestion_version: (suggestion.suggestion_version ?? 1) + 1,
+      predicted_eta: newEta,
+    }).eq('id', suggestionId)
+
+    setEditingSuggId(null)
     await fetchAll()
   }
 
@@ -390,7 +751,36 @@ export default function Operational() {
     [suggestions],
   )
 
-  // Route polyline: store → each stop with coordinates
+  useEffect(() => {
+    if (!selectedDriverId) return
+    if (!drivers.some(d => d.id === selectedDriverId)) {
+      setSelectedDriverId(null)
+    }
+  }, [drivers, selectedDriverId])
+
+  // Derived data for edit modal
+  const editingSuggestion = useMemo(
+    () => suggestions.find(s => s.id === editingSuggId) ?? null,
+    [suggestions, editingSuggId],
+  )
+  const editingOtherSuggestions = useMemo(
+    () => suggestions.filter(s => s.id !== editingSuggId),
+    [suggestions, editingSuggId],
+  )
+  const editingAvailable = useMemo(() => {
+    if (!editingSuggId) return []
+    const currentEditIds = new Set(editingSuggestion?.suggested_sequence ?? [])
+    const otherSuggOrderIds = new Set(
+      editingOtherSuggestions.flatMap(s => s.suggested_sequence),
+    )
+    return orders.filter(
+      o =>
+        (o.status === 'awaiting_route' && !currentEditIds.has(o.id)) ||
+        (o.status === 'in_suggestion' && otherSuggOrderIds.has(o.id) && !currentEditIds.has(o.id)),
+    )
+  }, [editingSuggId, editingSuggestion, editingOtherSuggestions, orders])
+
+  // Route polyline: straight-line coords (used as fallback while OSRM loads)
   const routeCoords = useMemo<[number, number][]>(() => {
     if (!selectedSuggestion) return []
     const coords: [number, number][] = []
@@ -407,6 +797,18 @@ export default function Operational() {
     return coords
   }, [selectedSuggestion, selectedSequence, store, orders])
 
+  // Real road geometry fetched from OSRM (replaces straight lines once loaded)
+  const [geoRouteCoords, setGeoRouteCoords] = useState<[number, number][]>([])
+
+  useEffect(() => {
+    setGeoRouteCoords([])           // clear previous geometry immediately
+    if (routeCoords.length < 2) return
+
+    fetchRouteGeometry(routeCoords)
+      .then(setGeoRouteCoords)
+      .catch(() => {})              // keep empty → falls back to routeCoords in map
+  }, [selectedSuggId])             // eslint-disable-line
+
   // Marker states (recomputed every tick for live dispatched→ghost transition)
   const markerStates = useMemo<Map<string, OrderMarkerState>>(() => {
     const map = new Map<string, OrderMarkerState>()
@@ -414,45 +816,116 @@ export default function Operational() {
 
     for (const order of orders) {
       const platformColor = PLATFORM_COLORS[order.platform] ?? '#666677'
+      let state: OrderMarkerState
 
-      // Dispatched: filled balloon, fades to ghost after DISPATCH_GHOST_MS
+      // Border always follows platform, fill always follows current status.
       if (order.status === 'dispatched') {
         if (order.dispatched_at) {
           const elapsed = now - new Date(order.dispatched_at).getTime()
           if (elapsed < DISPATCH_GHOST_MS) {
-            map.set(order.id, { platformColor, opacity: 1,    label: '', filled: true })
-            continue
+            state = {
+              borderColor: platformColor,
+              fillColor: MARKER_STATUS_COLORS.recentlyDispatched,
+              opacity: 1,
+              label: '',
+              dashed: false,
+            }
+          } else {
+            state = {
+              borderColor: platformColor,
+              fillColor: MARKER_STATUS_COLORS.ghost,
+              opacity: 0.35,
+              label: '',
+              dashed: true,
+            }
+          }
+        } else {
+          state = {
+            borderColor: platformColor,
+            fillColor: MARKER_STATUS_COLORS.ghost,
+            opacity: 0.35,
+            label: '',
+            dashed: true,
           }
         }
-        map.set(order.id, { platformColor, opacity: 0.12, label: '', filled: true })
-        continue
+      } else {
+        const seqIdx = selectedSequence.indexOf(order.id)
+        if (seqIdx >= 0) {
+          state = {
+            borderColor: platformColor,
+            fillColor: MARKER_STATUS_COLORS.selectedSuggestion,
+            opacity: 1,
+            label: String(seqIdx + 1),
+            dashed: false,
+          }
+        } else if (allSuggestionOrderIds.has(order.id)) {
+          state = {
+            borderColor: platformColor,
+            fillColor: MARKER_STATUS_COLORS.pendingSuggestion,
+            opacity: 1,
+            label: '',
+            dashed: false,
+          }
+        } else {
+          state = {
+            borderColor: platformColor,
+            fillColor: MARKER_STATUS_COLORS.outsideSuggestion,
+            opacity: 1,
+            label: '',
+            dashed: false,
+          }
+        }
       }
 
-      // In selected suggestion → yellow filled with stop number
-      const seqIdx = selectedSequence.indexOf(order.id)
-      if (seqIdx >= 0) {
-        map.set(order.id, { platformColor: '#facc15', opacity: 1, label: String(seqIdx + 1), filled: true })
-        continue
+      // Optional visual focus by selected driver
+      if (selectedDriverId) {
+        const assignedDriver = orderDriverMap[order.id] ?? null
+        if (assignedDriver === selectedDriverId) {
+          state = {
+            ...state,
+            opacity: 1,
+          }
+        } else {
+          state = {
+            ...state,
+            opacity: Math.min(state.opacity, assignedDriver ? 0.35 : 0.22),
+          }
+        }
       }
 
-      // In any pending suggestion → platform color, outline
-      if (allSuggestionOrderIds.has(order.id)) {
-        map.set(order.id, { platformColor, opacity: 1, label: '', filled: false })
-        continue
-      }
-
-      // Default: platform color, outline
-      map.set(order.id, { platformColor, opacity: 1, label: '', filled: false })
+      map.set(order.id, state)
     }
 
     return map
-  }, [orders, selectedSequence, allSuggestionOrderIds, tick]) // eslint-disable-line
+  }, [orders, selectedSequence, allSuggestionOrderIds, tick, selectedDriverId, orderDriverMap]) // eslint-disable-line
 
   const popupOrder = orders.find(o => o.id === popupOrderId) ?? null
 
   // Stats
   const waitingCount    = orders.filter(o => ['awaiting_route', 'normalized', 'received'].includes(o.status)).length
   const dispatchedCount = orders.filter(o => o.status === 'dispatched').length
+  const selectedDriverName = selectedDriverId
+    ? (drivers.find(d => d.id === selectedDriverId)?.name ?? 'Motoboy')
+    : 'Todos'
+  const selectedDriverOrderCount = selectedDriverId
+    ? Object.values(orderDriverMap).filter(id => id === selectedDriverId).length
+    : 0
+
+  const driverHighlightMarkers = useMemo<HighlightFinalized[]>(() => {
+    if (!selectedDriverId) return []
+    return finalized
+      .filter(entry => entry.driverId === selectedDriverId)
+      .map(entry => {
+        const coord: [number, number] | null =
+          entry.latitude != null && entry.longitude != null
+            ? [entry.latitude, entry.longitude]
+            : geocodedCoords[entry.id] ?? null
+        return coord
+          ? { coord, code: entry.code, platformColor: PLATFORM_COLORS[entry.platform] ?? '#666677' }
+          : null
+      })
+      .filter(Boolean) as HighlightFinalized[]
+  }, [selectedDriverId, finalized, geocodedCoords])
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -506,10 +979,56 @@ export default function Operational() {
             <span className="op-stat-val">{dispatchedCount}</span>
             <span className="op-stat-lbl">Despachados</span>
           </div>
-          <div className="op-stat">
-            <span className="op-stat-dot" style={{ background: '#60a5fa' }} />
-            <span className="op-stat-val">{drivers.length}</span>
-            <span className="op-stat-lbl">Motoboys</span>
+          <div className={`op-driver-filter ${driverFilterOpen ? 'open' : ''}`} ref={driverFilterRef}>
+            <button
+              className="op-stat op-stat-driver-btn"
+              onClick={() => setDriverFilterOpen(prev => !prev)}
+              type="button"
+            >
+              <span className="op-stat-dot" style={{ background: '#60a5fa' }} />
+              <span className="op-stat-val">{selectedDriverId ? selectedDriverOrderCount : drivers.length}</span>
+              <span className="op-stat-lbl">{selectedDriverId ? `Motoboy: ${selectedDriverName}` : 'Motoboys'}</span>
+              <svg
+                className={`op-stat-chevron ${driverFilterOpen ? 'open' : ''}`}
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            {driverFilterOpen && (
+              <div className="op-driver-menu">
+                <button
+                  className={`op-driver-menu-item ${selectedDriverId == null ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedDriverId(null)
+                    setDriverFilterOpen(false)
+                  }}
+                  type="button"
+                >
+                  Todos os motoboys
+                </button>
+                {drivers.map(driver => (
+                  <button
+                    key={driver.id}
+                    className={`op-driver-menu-item ${selectedDriverId === driver.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedDriverId(driver.id)
+                      setDriverFilterOpen(false)
+                    }}
+                    type="button"
+                  >
+                    {driver.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -521,8 +1040,20 @@ export default function Operational() {
             store={store}
             orders={orders}
             markerStates={markerStates}
-            routeCoords={routeCoords}
+            routeCoords={geoRouteCoords.length >= 2 ? geoRouteCoords : routeCoords}
             onOrderCtrlClick={(id) => setPopupOrderId(prev => prev === id ? null : id)}
+            driverHighlightMarkers={driverHighlightMarkers}
+            highlightFinalized={(() => {
+              const f = finalized.find(e => e.id === selectedFinalizedId)
+              if (!f) return null
+              const coord: [number, number] | null =
+                f.latitude != null && f.longitude != null
+                  ? [f.latitude, f.longitude]
+                  : geocodedCoords[f.id] ?? null
+              return coord
+                ? { coord, code: f.code, platformColor: PLATFORM_COLORS[f.platform] ?? '#666677' }
+                : null
+            })()}
           />
 
           {popupOrder && (
@@ -534,30 +1065,37 @@ export default function Operational() {
 
           {/* Legend */}
           <div className="map-legend">
+            <div className="legend-note">Borda do ícone = plataforma</div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: '#555566' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.outsideSuggestion }} />
               Fora de sugestão
             </div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: '#60a5fa' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.pendingSuggestion }} />
               Em sugestão pendente
             </div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: '#facc15' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.selectedSuggestion }} />
               Sugestão selecionada
             </div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: '#4ade80' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.recentlyDispatched }} />
               Recém despachado
             </div>
             <div className="legend-row">
-              <span className="legend-dot" style={{ background: 'rgba(255,255,255,0.2)', border: '1px dashed #444' }} />
+              <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.ghost, border: '1px dashed #444' }} />
               Fantasma
             </div>
             <div className="legend-row">
               <span style={{ fontSize: 14, lineHeight: 1 }}>🏠</span>
               Loja
             </div>
+            {selectedDriverId && (
+              <div className="legend-row">
+                <span className="legend-dot" style={{ background: MARKER_STATUS_COLORS.driverFocus }} />
+                Foco: {selectedDriverName}
+              </div>
+            )}
           </div>
         </div>
 
@@ -579,6 +1117,13 @@ export default function Operational() {
               Em andamento
               <span className="panel-tab-badge">{inProgress.length}</span>
             </button>
+            <button
+              className={`panel-tab ${activeTab === 'finalized' ? 'active' : ''}`}
+              onClick={() => setActiveTab('finalized')}
+            >
+              Finalizados
+              <span className="panel-tab-badge">{finalized.length}</span>
+            </button>
           </div>
 
           {/* Content */}
@@ -595,7 +1140,35 @@ export default function Operational() {
                   Nenhuma sugestão pendente
                 </div>
               ) : (
-                suggestions.map(s => (
+                <>
+                  {suggestions.length >= 2 && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      padding: '4px 8px 8px',
+                    }}>
+                      <button
+                        onClick={handleBulkReject}
+                        disabled={loadingAction === '__bulk__'}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: '4px 10px',
+                          borderRadius: 4,
+                          border: '1px solid #5a1b1b',
+                          background: '#2a0e0e',
+                          color: '#fca5a5',
+                          cursor: loadingAction === '__bulk__' ? 'wait' : 'pointer',
+                        }}
+                        title="Recusar todas as sugestões pendentes"
+                      >
+                        {loadingAction === '__bulk__'
+                          ? 'Recusando...'
+                          : `Recusar todas (${suggestions.length})`}
+                      </button>
+                    </div>
+                  )}
+                  {suggestions.map(s => (
                   <SuggestionBlock
                     key={s.id}
                     suggestion={s}
@@ -607,10 +1180,12 @@ export default function Operational() {
                     onDriverChange={val => setDriverSelections(prev => ({ ...prev, [s.id]: val }))}
                     onAccept={() => handleAccept(s)}
                     onReject={() => handleReject(s)}
+                    onEdit={() => setEditingSuggId(s.id)}
                   />
-                ))
+                ))}
+                </>
               )
-            ) : (
+            ) : activeTab === 'inprogress' ? (
               inProgress.length === 0 ? (
                 <div className="panel-empty">
                   <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -623,10 +1198,280 @@ export default function Operational() {
                   <InProgressBlock key={entry.suggestionId} entry={entry} />
                 ))
               )
+            ) : (
+              finalized.length === 0 ? (
+                <div className="panel-empty">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <polyline points="9 11 12 14 22 4"/>
+                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                  </svg>
+                  Nenhum pedido finalizado hoje
+                </div>
+              ) : (
+                finalized.map(entry => (
+                  <FinalizedBlock
+                    key={entry.id}
+                    entry={entry}
+                    isSelected={selectedFinalizedId === entry.id}
+                    isGeocoding={geocodingId === entry.id}
+                    onClick={() => handleFinalizedClick(entry)}
+                  />
+                ))
+              )
             )}
           </div>
         </div>
       </div>
+
+      {editingSuggestion && (
+        <EditSuggestionModal
+          suggestion={editingSuggestion}
+          availableOrders={editingAvailable}
+          otherSuggestions={editingOtherSuggestions}
+          storeCoord={store?.latitude != null && store?.longitude != null
+            ? [store.latitude, store.longitude]
+            : null
+          }
+          onSave={handleEditSave}
+          onClose={() => setEditingSuggId(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── EditSuggestionModal ───────────────────────────────────────────────────────
+
+interface EditSuggestionModalProps {
+  suggestion:        SuggestionRow
+  availableOrders:   Order[]
+  otherSuggestions:  SuggestionRow[]
+  storeCoord:        [number, number] | null
+  onSave:            (suggestionId: string, newSequence: Order[]) => Promise<void>
+  onClose:           () => void
+}
+
+function EditSuggestionModal({
+  suggestion, availableOrders, otherSuggestions, storeCoord, onSave, onClose,
+}: EditSuggestionModalProps) {
+  const [sequence, setSequence]     = useState<Order[]>(suggestion.orders)
+  const [showPicker, setShowPicker] = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [optimizing, setOptimizing] = useState(false)
+
+  const currentIds = useMemo(() => new Set(sequence.map(o => o.id)), [sequence])
+  const pickable   = availableOrders.filter(o => !currentIds.has(o.id))
+
+  function removeOrder(orderId: string) {
+    setSequence(prev => prev.filter(o => o.id !== orderId))
+  }
+
+  function moveUp(idx: number) {
+    if (idx === 0) return
+    setSequence(prev => {
+      const next = [...prev]
+      ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+      return next
+    })
+  }
+
+  function moveDown(idx: number) {
+    setSequence(prev => {
+      if (idx >= prev.length - 1) return prev
+      const next = [...prev]
+      ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+      return next
+    })
+  }
+
+  async function addOrder(order: Order) {
+    const newSeq = [...sequence, order]
+    setShowPicker(false)
+
+    // Auto-optimize sequence via OSRM when store coords are available
+    if (storeCoord && newSeq.every(o => o.latitude != null && o.longitude != null)) {
+      setOptimizing(true)
+      try {
+        const { sequence: opt } = await findOptimalSequence(storeCoord, newSeq)
+        setSequence(opt)
+      } catch {
+        setSequence(newSeq)
+      } finally {
+        setOptimizing(false)
+      }
+    } else {
+      setSequence(newSeq)
+    }
+  }
+
+  async function handleSave() {
+    if (sequence.length === 0) return
+    setSaving(true)
+    await onSave(suggestion.id, sequence)
+    setSaving(false)
+  }
+
+  return (
+    <div className="edit-modal-overlay" onClick={onClose}>
+      <div className="edit-modal" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="edit-modal-header">
+          <span>Editar sugestão <strong>#{suggestion.id.slice(0, 8).toUpperCase()}</strong></span>
+          <button className="edit-modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Sequence list */}
+        <div className="edit-modal-body">
+          {optimizing ? (
+            <div className="edit-optimizing">Otimizando rota...</div>
+          ) : sequence.length === 0 ? (
+            <div className="edit-empty">Nenhuma entrega — adicione ao menos uma</div>
+          ) : (
+            sequence.map((order, idx) => {
+              const inOtherSugg = otherSuggestions.find(s => s.orders.some(o => o.id === order.id))
+              return (
+                <div key={order.id} className="edit-stop">
+                  <span className="edit-stop-num">{idx + 1}</span>
+                  <span className="edit-stop-dot" style={{ background: PLATFORM_COLORS[order.platform] }} />
+                  <div className="edit-stop-info">
+                    <div className="edit-stop-customer">{order.customer_name}</div>
+                    <div className="edit-stop-address">{shortAddress(order)}</div>
+                    {inOtherSugg && (
+                      <div className="edit-stop-stolen">
+                        Retirar de #{inOtherSugg.id.slice(0, 8).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="edit-stop-remove"
+                    onClick={() => removeOrder(order.id)}
+                    title="Remover entrega"
+                  >
+                    −
+                  </button>
+                  <div className="edit-stop-move">
+                    <button
+                      className="edit-move-btn"
+                      onClick={() => moveUp(idx)}
+                      disabled={idx === 0}
+                      title="Mover para cima"
+                    >▲</button>
+                    <button
+                      className="edit-move-btn"
+                      onClick={() => moveDown(idx)}
+                      disabled={idx === sequence.length - 1}
+                      title="Mover para baixo"
+                    >▼</button>
+                  </div>
+                </div>
+              )
+            })
+          )}
+
+          <button className="edit-add-btn" onClick={() => setShowPicker(true)}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Adicionar entrega
+          </button>
+        </div>
+
+        {/* Footer */}
+        <div className="edit-modal-footer">
+          <button className="edit-cancel-btn" onClick={onClose}>Cancelar</button>
+          <button
+            className="edit-save-btn"
+            disabled={saving || sequence.length === 0}
+            onClick={handleSave}
+          >
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+
+      {/* Order picker */}
+      {showPicker && (
+        <div className="edit-picker-overlay" onClick={() => setShowPicker(false)}>
+          <div className="edit-picker" onClick={e => e.stopPropagation()}>
+            <div className="edit-picker-header">
+              <span>Selecionar entrega</span>
+              <button className="edit-modal-close" onClick={() => setShowPicker(false)}>✕</button>
+            </div>
+            <div className="edit-picker-list">
+              {pickable.length === 0 ? (
+                <div className="edit-picker-empty">Nenhuma entrega disponível</div>
+              ) : (
+                pickable.map(order => {
+                  const inOtherSugg = otherSuggestions.find(s => s.orders.some(o => o.id === order.id))
+                  return (
+                    <div
+                      key={order.id}
+                      className="edit-picker-item"
+                      onClick={() => addOrder(order)}
+                    >
+                      <span className="edit-picker-dot" style={{ background: PLATFORM_COLORS[order.platform] }} />
+                      <div className="edit-picker-info">
+                        <div className="edit-picker-customer">{order.customer_name}</div>
+                        <div className="edit-picker-address">{shortAddress(order)}</div>
+                        {inOtherSugg && (
+                          <div className="edit-picker-stolen">
+                            Em sugestão #{inOtherSugg.id.slice(0, 8).toUpperCase()} — será retirado
+                          </div>
+                        )}
+                      </div>
+                      <span className="edit-picker-amount">{formatCurrency(order.total_amount)}</span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── FinalizedBlock ────────────────────────────────────────────────────────────
+
+const FINALIZED_STATUS_LABEL: Record<string, { label: string; color: string }> = {
+  dispatched: { label: 'Despachado', color: '#60a5fa' },
+  delivered:  { label: 'Entregue',   color: '#4ade80' },
+  cancelled:  { label: 'Cancelado',  color: '#f87171' },
+}
+
+function FinalizedBlock({ entry, isSelected, isGeocoding, onClick }: {
+  entry: FinalizedEntry
+  isSelected: boolean
+  isGeocoding: boolean
+  onClick: () => void
+}) {
+  const platformColor = PLATFORM_COLORS[entry.platform] ?? '#666677'
+  const st = FINALIZED_STATUS_LABEL[entry.status] ?? { label: entry.status, color: '#888' }
+  const hasAddress = !!(entry.addressStreet || entry.addressZip || entry.latitude != null)
+
+  return (
+    <div
+      className={`fin-block clickable ${isSelected ? 'selected' : ''} ${isGeocoding ? 'geocoding' : ''}`}
+      onClick={hasAddress ? onClick : undefined}
+      style={!hasAddress ? { cursor: 'default' } : undefined}
+    >
+      <span className="fin-platform-dot" style={{ background: platformColor }} />
+      <div className="fin-info">
+        <div className="fin-top">
+          <span className="fin-code">{entry.code}</span>
+          <span className="fin-status" style={{ color: st.color }}>{st.label}</span>
+        </div>
+        <div className="fin-customer">{entry.customerName}</div>
+        <div className="fin-driver">
+          {entry.driverName
+            ? entry.driverName
+            : <span className="fin-driver-none">motoboy não identificado</span>
+          }
+        </div>
+      </div>
+      <span className="fin-amount">{formatCurrency(entry.totalAmount)}</span>
+      {isGeocoding && <span className="fin-geocoding-spinner" />}
     </div>
   )
 }

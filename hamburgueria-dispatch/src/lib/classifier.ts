@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 import { geocodeOrderAddress } from './geocoder'
+import { runRouteEngine } from './routeEngine'
+import { logOrderEvent } from './orderEvents'
 import type { Order, RouteEligibility } from '../types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -70,6 +72,82 @@ export function classifyOrder(order: Order): ClassificationResult {
   }
 }
 
+// ── Batch: classify all pending orders (startup + poll fallback) ──────────────
+//
+// Varre pedidos com status='normalized' e os classifica.
+// Garante que nenhum pedido fique preso mesmo se o Realtime INSERT
+// não disparar (ex: Realtime não habilitado na tabela no Supabase).
+
+export async function classifyPendingOrders(storeId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('status', 'normalized')
+
+  if (error || !data?.length) return
+
+  console.debug(`[Classifier] ${data.length} pedido(s) normalized encontrado(s) — classificando...`)
+
+  let triggerEngine = false
+
+  for (const order of data as Order[]) {
+    let geocodedCoords: { latitude: number; longitude: number } | null = null
+
+    if ((order.latitude == null || order.longitude == null) && order.address_street?.trim()) {
+      const geo = await geocodeOrderAddress(
+        order.address_street,
+        order.address_number,
+        order.address_neighborhood,
+        order.address_city,
+        order.address_zip,
+      )
+      if (geo) geocodedCoords = { latitude: geo.latitude, longitude: geo.longitude }
+    }
+
+    const enrichedOrder = geocodedCoords
+      ? { ...order, latitude: geocodedCoords.latitude, longitude: geocodedCoords.longitude }
+      : order as Order
+
+    const result = classifyOrder(enrichedOrder)
+
+    const { error: updateError } = await supabase
+      .from('orders')
+      .update({
+        route_eligibility:  result.route_eligibility,
+        route_block_reason: result.route_block_reason,
+        status:             result.status,
+        ...(geocodedCoords ?? {}),
+      })
+      .eq('id', order.id)
+
+    if (!updateError) {
+      logOrderEvent({
+        orderId:   order.id,
+        storeId:   order.store_id,
+        eventType: 'classified',
+        actorType: 'system',
+        previous:  { status: order.status, route_eligibility: order.route_eligibility ?? null },
+        next: {
+          status:             result.status,
+          route_eligibility:  result.route_eligibility,
+          route_block_reason: result.route_block_reason,
+        },
+        metadata: geocodedCoords ? { geocoded: true } : null,
+      })
+    }
+
+    if (result.status === 'awaiting_route') triggerEngine = true
+  }
+
+  // Um único disparo do engine após classificar o lote
+  if (triggerEngine) {
+    runRouteEngine(storeId).catch(e =>
+      console.error('[Classifier] runRouteEngine error:', e),
+    )
+  }
+}
+
 // ── Supabase Realtime subscription ────────────────────────────────────────────
 
 let classifierChannel: ReturnType<typeof supabase.channel> | null = null
@@ -85,54 +163,28 @@ export function startClassifier(storeId: string): () => void {
         event: 'INSERT',
         schema: 'public',
         table: 'orders',
-        filter: `store_id=eq.${storeId}`,
+        // Sem filtro server-side: o filtro por store_id exige REPLICA IDENTITY FULL
+        // no Supabase. Sem isso, eventos não chegam. Filtramos client-side abaixo.
       },
       async (payload) => {
         const order = payload.new as Order
+        if (order.store_id !== storeId) return  // filtro client-side
 
-        // Se o pedido não tem coordenadas mas tem rua, tenta geocodificar
-        // usando CEP + número da casa antes de classificar
-        let geocodedCoords: { latitude: number; longitude: number } | null = null
-
-        if (
-          (order.latitude == null || order.longitude == null) &&
-          order.address_street?.trim()
-        ) {
-          console.debug(`[Classifier] Pedido ${order.platform_order_code ?? order.id.slice(0, 8)} sem coords — tentando geocodificar...`)
-
-          const geo = await geocodeOrderAddress(
-            order.address_street,
-            order.address_number,
-            order.address_neighborhood,
-            order.address_city,
-            order.address_zip,
-          )
-
-          if (geo) {
-            geocodedCoords = { latitude: geo.latitude, longitude: geo.longitude }
-            console.debug(`[Classifier] Geocodificado via ${geo.source}: ${geo.latitude.toFixed(5)}, ${geo.longitude.toFixed(5)}`)
-          } else {
-            console.warn(`[Classifier] Geocodificação falhou para o pedido ${order.platform_order_code ?? order.id.slice(0, 8)}`)
-          }
-        }
-
-        // Classifica com as coordenadas obtidas (se houver)
-        const enrichedOrder = geocodedCoords
-          ? { ...order, latitude: geocodedCoords.latitude, longitude: geocodedCoords.longitude }
-          : order
-
-        const result = classifyOrder(enrichedOrder)
-
-        await supabase
-          .from('orders')
-          .update({
-            route_eligibility:  result.route_eligibility,
-            route_block_reason: result.route_block_reason,
-            status:             result.status,
-            // Persiste as coordenadas geocodificadas junto com a classificação
-            ...(geocodedCoords ?? {}),
-          })
-          .eq('id', order.id)
+        // Processa TODOS os pedidos normalized pendentes — não só este INSERT.
+        //
+        // Motivo: se vários pedidos chegam quase simultaneamente, cada INSERT
+        // dispara este handler. Classificar apenas o pedido do evento e acionar
+        // o engine imediatamente faz o engine rodar com conjunto incompleto,
+        // gerando pares ruins (ex: dois pedidos distantes enquanto vários
+        // próximos ainda estão em 'normalized').
+        //
+        // Ao delegar para classifyPendingOrders, todos os normalized são
+        // geocodificados e classificados numa única passagem antes do engine
+        // ser acionado. Chamadas concorrentes retornam cedo (0 normalized
+        // restantes) sem duplicar trabalho.
+        await classifyPendingOrders(storeId).catch(e =>
+          console.error('[Classifier] classifyPendingOrders error:', e),
+        )
       },
     )
     .subscribe()

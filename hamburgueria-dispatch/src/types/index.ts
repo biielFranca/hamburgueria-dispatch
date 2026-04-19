@@ -35,6 +35,7 @@ export interface Store {
   name: string
   address: string
   phone?: string
+  logo_url?: string | null
   latitude?: number
   longitude?: number
   active: boolean
@@ -66,6 +67,10 @@ export interface Driver {
   name: string
   active: boolean
   created_at: string
+  last_lat?:     number | null
+  last_lng?:     number | null
+  last_seen_at?: string | null
+  gps_enabled?:  boolean
 }
 
 export interface OrderItem {
@@ -122,4 +127,93 @@ export interface DispatchSuggestion {
   reviewed_at?: string
   orders?: Order[]
   driver?: Driver
+}
+
+// ── Catalog domain ─────────────────────────────────────────────────────────────
+
+export interface CatalogCategory {
+  id:         string
+  store_id:   string
+  name:       string
+  sort_order: number
+  active:     boolean
+  created_at: string
+}
+
+export interface CatalogItem {
+  id:           string
+  store_id:     string
+  category_id:  string | null
+  name:         string
+  description:  string | null
+  price:        number
+  active:       boolean
+  created_at:   string
+  updated_at:   string
+  category?:    CatalogCategory
+  availability?: ItemAvailabilityState
+  aliases?:     CatalogItemAlias[]
+}
+
+export interface CatalogItemAlias {
+  id:              string
+  catalog_item_id: string
+  store_id:        string
+  alias:           string
+  created_at:      string
+}
+
+export interface PlatformItemMapping {
+  id:              string
+  store_id:        string
+  catalog_item_id: string
+  platform:        Platform
+  external_code:   string
+  external_name:   string | null
+  created_at:      string
+}
+
+export interface ItemAvailabilityState {
+  id:              string
+  catalog_item_id: string
+  store_id:        string
+  available:       boolean
+  reason:          string | null
+  paused_until:    string | null
+  updated_at:      string
+}
+
+// ── Inventory domain ───────────────────────────────────────────────────────────
+
+export interface InventoryItem {
+  id:           string
+  store_id:     string
+  name:         string
+  unit:         string
+  quantity:     number
+  min_quantity: number
+  created_at:   string
+  updated_at:   string
+}
+
+export interface StockMovement {
+  id:                 string
+  store_id:           string
+  inventory_item_id:  string
+  quantity:           number
+  movement_type:      'sale' | 'manual_in' | 'manual_out' | 'adjustment' | 'waste'
+  reference_id:       string | null
+  notes:              string | null
+  actor_type:         string
+  actor_id:           string | null
+  created_at:         string
+}
+
+export interface ItemComponent {
+  id:                 string
+  store_id:           string
+  catalog_item_id:    string
+  inventory_item_id:  string
+  quantity_used:      number
+  created_at:         string
 }

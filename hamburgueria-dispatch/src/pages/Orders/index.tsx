@@ -1,17 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { Order, Platform } from '../../types'
+import { PLATFORMS } from '../../lib/platformConfig'
 import OrderForm from '../../components/OrderForm'
 import './Orders.css'
-
-// ── Platform config ──────────────────────────────────────────────────────────
-
-const PLATFORMS: { key: Platform; label: string; color: string }[] = [
-  { key: 'ifood',        label: 'iFood',        color: '#EA1D2C' },
-  { key: 'keeta',        label: 'Keeta',        color: '#27AE60' },
-  { key: '99food',       label: '99Food',       color: '#F5A623' },
-  { key: 'cardapio_web', label: 'Cardápio Web', color: '#8B5CF6' },
-]
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -268,6 +260,8 @@ function OrderModal({ order, onClose }: { order: Order | null; onClose: () => vo
 
 // ── Main component ───────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 100
+
 export default function Orders() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
@@ -275,6 +269,8 @@ export default function Orders() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const storeIdRef = useRef<string | null>(null)
 
   async function resolveStoreId(): Promise<string | null> {
@@ -308,20 +304,45 @@ export default function Orders() {
       .eq('store_id', sid)
       .not('status', 'in', '("delivered","cancelled")')
       .order('created_at', { ascending: false })
-      .limit(300)
+      .limit(PAGE_SIZE + 1)
 
     if (error) {
       setError('Erro ao carregar pedidos: ' + error.message)
     } else {
-      setOrders(data as Order[])
+      const rows = (data ?? []) as Order[]
+      setHasMore(rows.length > PAGE_SIZE)
+      setOrders(rows.slice(0, PAGE_SIZE))
       setError(null)
     }
     setLoading(false)
     setRefreshing(false)
   }
 
+  async function loadMore() {
+    if (loadingMore || !hasMore || orders.length === 0) return
+    const sid = storeIdRef.current ?? (await resolveStoreId())
+    if (!sid) return
+    setLoadingMore(true)
+    const cursor = orders[orders.length - 1].created_at
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id,store_id,platform,platform_order_id,platform_order_code,customer_name,customer_phone,address_street,address_number,address_complement,address_neighborhood,address_city,address_zip,latitude,longitude,items,total_amount,payment_method,delivery_type,logistics_type,status,route_eligibility,route_block_reason,rejection_count,estimated_delivery_at,dispatched_at,created_at,updated_at')
+      .eq('store_id', sid)
+      .not('status', 'in', '("delivered","cancelled")')
+      .lt('created_at', cursor)
+      .order('created_at', { ascending: false })
+      .limit(PAGE_SIZE + 1)
+    if (!error && data) {
+      const rows = data as Order[]
+      setHasMore(rows.length > PAGE_SIZE)
+      setOrders(prev => [...prev, ...rows.slice(0, PAGE_SIZE)])
+    }
+    setLoadingMore(false)
+  }
+
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
     async function init() {
       const sid = await resolveStoreId()
@@ -332,11 +353,14 @@ export default function Orders() {
 
       await fetchOrders(sid)
 
-      // Real-time subscription scoped by store
+      // Real-time subscription scoped by store. Debounce bursts of changes
+      // (a single dispatch flips N orders + 1 suggestion) into one refetch
+      // so the list — and any open modal — doesn't flicker mid-transaction.
       channel = supabase
         .channel(`orders-changes-${sid}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `store_id=eq.${sid}` }, () => {
-          fetchOrders(sid)
+          if (debounceTimer) clearTimeout(debounceTimer)
+          debounceTimer = setTimeout(() => { fetchOrders(sid) }, 250)
         })
         .subscribe()
     }
@@ -345,8 +369,18 @@ export default function Orders() {
 
     return () => {
       if (channel) supabase.removeChannel(channel)
+      if (debounceTimer) clearTimeout(debounceTimer)
     }
   }, [])
+
+  // Keep the open modal in sync with the latest orders snapshot. Without this
+  // the modal keeps displaying a stale Order object after a realtime refetch —
+  // which looks like a flicker when the user eventually interacts with it.
+  useEffect(() => {
+    if (!selectedOrder) return
+    const fresh = orders.find(o => o.id === selectedOrder.id)
+    if (fresh && fresh !== selectedOrder) setSelectedOrder(fresh)
+  }, [orders, selectedOrder])
 
   const ordersByPlatform = (platform: Platform) =>
     orders.filter(o => o.platform === platform)
@@ -418,6 +452,26 @@ export default function Orders() {
           )
         })}
       </div>
+
+      {hasMore && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            style={{
+              padding: '8px 20px',
+              background: '#1a1a1a',
+              color: '#bbb',
+              border: '1px solid #2a2a2a',
+              borderRadius: 6,
+              fontSize: 12,
+              cursor: loadingMore ? 'wait' : 'pointer',
+            }}
+          >
+            {loadingMore ? 'Carregando...' : `Carregar mais ${PAGE_SIZE}`}
+          </button>
+        </div>
+      )}
 
       <OrderModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />
 

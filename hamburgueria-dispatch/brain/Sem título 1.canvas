@@ -1,0 +1,13 @@
+{
+	"nodes":[
+		{"id":"e9b9bbc4862056e0","type":"text","text":" PEDIDO CHEGA","x":-1160,"y":-1240,"width":250,"height":60,"color":"5"},
+		{"id":"b06f450099c1135d","type":"text","text":"CLASSIFICADOR","x":-1160,"y":-1080,"width":250,"height":60},
+		{"id":"0d23dc5c5447c1f3","type":"text","text":"ELEGIVEL","x":-1410,"y":-920,"width":250,"height":60},
+		{"id":"6bf2652cb93a4029","type":"text","text":"INELEGIVEL","x":-910,"y":-920,"width":250,"height":60}
+	],
+	"edges":[
+		{"id":"ccc914641f3f5798","fromNode":"b06f450099c1135d","fromSide":"bottom","toNode":"6bf2652cb93a4029","toSide":"top"},
+		{"id":"f728b6fd6be0df62","fromNode":"b06f450099c1135d","fromSide":"bottom","toNode":"0d23dc5c5447c1f3","toSide":"top"},
+		{"id":"c8bc76c644643c7d","fromNode":"e9b9bbc4862056e0","fromSide":"bottom","toNode":"b06f450099c1135d","toSide":"top"}
+	]
+}

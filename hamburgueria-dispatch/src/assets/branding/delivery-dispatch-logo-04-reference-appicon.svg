@@ -1,0 +1,47 @@
+﻿<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="speedBlueIcon" x1="180" y1="0" x2="560" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4FC3F7"/>
+      <stop offset="0.55" stop-color="#1E88E5"/>
+      <stop offset="1" stop-color="#0D47A1"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="#0F172A"/>
+  <rect x="46" y="46" width="932" height="932" rx="188" stroke="#1E293B" stroke-width="10"/>
+
+  <g transform="translate(-20,20)">
+    <rect x="292" y="435" width="190" height="14" rx="7" fill="#E2E8F0"/>
+
+    <rect x="150" y="387" width="210" height="20" rx="10" fill="url(#speedBlueIcon)"/>
+    <rect x="124" y="437" width="236" height="20" rx="10" fill="url(#speedBlueIcon)"/>
+    <rect x="165" y="487" width="195" height="20" rx="10" fill="url(#speedBlueIcon)"/>
+
+    <rect x="252" y="325" width="122" height="108" rx="12" stroke="#E2E8F0" stroke-width="10"/>
+    <path d="M289 325V339H337V325" stroke="#E2E8F0" stroke-width="7" stroke-linecap="round"/>
+
+    <circle cx="344" cy="500" r="48" stroke="#E2E8F0" stroke-width="10"/>
+    <circle cx="344" cy="500" r="18" fill="#E2E8F0"/>
+    <circle cx="615" cy="500" r="48" stroke="#E2E8F0" stroke-width="10"/>
+    <circle cx="615" cy="500" r="18" fill="#E2E8F0"/>
+
+    <path d="M307 500H615" stroke="#E2E8F0" stroke-width="12" stroke-linecap="round"/>
+    <path d="M294 495C294 456 315 425 363 419H419C459 419 474 438 474 470V496H294Z" stroke="#E2E8F0" stroke-width="10" stroke-linejoin="round"/>
+
+    <path d="M474 500C492 496 512 480 512 460V414L554 356L582 356L595 420C600 434 602 446 609 460C616 474 620 484 622 500" stroke="#E2E8F0" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <path d="M418 340C450 340 472 342 491 345C525 351 536 356 564 366" stroke="#E2E8F0" stroke-width="10" stroke-linecap="round"/>
+    <path d="M430 320C422 331 415 344 408 360" stroke="#E2E8F0" stroke-width="10" stroke-linecap="round"/>
+
+    <circle cx="438" cy="225" r="50" stroke="#E2E8F0" stroke-width="10"/>
+    <path d="M437 216C459 220 479 227 492 237C487 247 483 254 481 263C465 264 449 260 432 253C423 250 417 245 413 239C417 232 424 223 437 216Z" fill="url(#speedBlueIcon)"/>
+
+    <path d="M402 414C404 364 412 327 442 279C459 252 482 240 506 242" stroke="#E2E8F0" stroke-width="10" stroke-linecap="round"/>
+    <path d="M428 301C452 330 468 347 489 360" stroke="#E2E8F0" stroke-width="8" stroke-linecap="round"/>
+
+    <path d="M528 356L570 354" stroke="#E2E8F0" stroke-width="10" stroke-linecap="round"/>
+    <path d="M569 354C586 346 594 343 609 340V386C594 386 586 384 569 374V354Z" stroke="#E2E8F0" stroke-width="10" stroke-linejoin="round"/>
+
+    <path d="M210 560H620" stroke="#E2E8F0" stroke-width="10" stroke-linecap="round"/>
+  </g>
+</svg>
