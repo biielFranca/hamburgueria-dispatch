@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 import { useAuth } from './AuthBootstrap'
-import type { UserRole, UserPermissions } from '../../types'
+import type { UserRole } from '../../types'
 import type { Page } from '../../App'
 
 interface AccessState {
@@ -23,7 +23,7 @@ export function AccessControl({ children }: { children: React.ReactNode }) {
 
   function hasAccess(page: Page): boolean {
     if (page === 'users'    && !isOwner) return false
-    if (page === 'dev'      && userRole !== 'owner') return false
+    if (page === 'dev'      && !isOwner) return false
     if (page === 'settings' && userRole !== 'owner') return false
     if (page === 'cardapio' && !isOwner) return false
     if (page === 'estoque'  && !isOwner) return false

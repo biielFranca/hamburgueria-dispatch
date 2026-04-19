@@ -46,11 +46,16 @@ export function AuthBootstrap({ children }: { children: React.ReactNode }) {
   }
 
   async function fetchRole(authId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('users').select('role, permissions').eq('auth_id', authId).single()
+    if (error) {
+      console.warn('[AuthBootstrap] fetchRole failed:', error.message)
+      return
+    }
     if (data) {
       setUserRole(data.role as UserRole)
-      setPermissions(data.permissions ?? DEFAULT_PERMISSIONS)
+      // Merge with defaults so partial/empty objects don't hide tabs
+      setPermissions({ ...DEFAULT_PERMISSIONS, ...(data.permissions ?? {}) })
     }
   }
 
