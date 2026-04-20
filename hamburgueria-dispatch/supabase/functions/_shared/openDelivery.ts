@@ -420,9 +420,21 @@ function normalizeOrder(
   const orderId = parseString(order.id, order.orderId, order.referenceCode) ?? ''
   if (!orderId) throw new Error('order payload sem identificador')
 
+  // salesChannel (Open Delivery) indica origem real quando vem via agregador
+  // (ex.: Cardápio Web consolidando iFood/99Food/Keeta/site próprio)
+  const sourceChannel = parseString(
+    (order as any).salesChannel,
+    (order as any).sales_channel,
+    (order as any).channel,
+    (order as any).source,
+    (order as any).origin,
+    ((order as any).metadata as any)?.salesChannel,
+  )?.toUpperCase() ?? null
+
   return {
     store_id: storeId,
     platform,
+    source_channel: sourceChannel,
     platform_order_id: orderId,
     platform_order_code: parseString(order.displayId, order.code, order.referenceCode),
     customer_name: parseString((order.customer as any)?.name, order.customerName) ?? 'Cliente Open Delivery',

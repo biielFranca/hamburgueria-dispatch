@@ -85,6 +85,13 @@ export interface Order {
   id: string
   store_id: string
   platform: Platform
+  /**
+   * Canal de origem real do pedido quando vem via agregador.
+   * Ex.: Cardápio Web consolida iFood/99Food/Keeta/site próprio — este campo
+   * traz o `salesChannel` do payload Open Delivery (IFOOD, 99FOOD, KEETA,
+   * DELIVERYHUB, PARTNER, OWN_SITE, etc). Null para pedidos diretos.
+   */
+  source_channel?: string | null
   platform_order_id: string
   platform_order_code?: string
   customer_name: string
