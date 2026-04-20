@@ -50,7 +50,7 @@ async function fetchEligibleOrders(storeId: string): Promise<Order[]> {
     .order('rejection_count', { ascending: false })
     .order('created_at', { ascending: true })
 
-  if (error) throw error
+  if (error) throw new Error(error.message ?? JSON.stringify(error))
   return (data ?? []) as Order[]
 }
 
@@ -73,7 +73,7 @@ async function createSuggestion(
     .select()
     .single()
 
-  if (error) throw error
+  if (error) throw new Error(error.message ?? JSON.stringify(error))
 
   // Link orders to suggestion (best-effort; main flow already succeeded above)
   const orderLinks = sequence.map((order, idx) => ({
@@ -313,6 +313,12 @@ export async function runRouteEngine(storeId: string): Promise<RouteEngineResult
   engineRunning = true
 
   try {
+    // Skip if there's already a pending suggestion awaiting review
+    const { data: pendingSug } = await supabase
+      .from('dispatch_suggestions')
+      .select('id').eq('store_id', storeId).eq('status', 'pending_review').maybeSingle()
+    if (pendingSug) return { outcome: 'concurrent_skip', detail: 'sugestão pendente já existe' }
+
     // Get store coordinates
     const { data: storeData } = await supabase
       .from('stores').select('*').eq('id', storeId).single()
