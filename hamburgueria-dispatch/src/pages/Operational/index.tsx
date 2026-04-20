@@ -8,6 +8,7 @@ import type { Driver, Order, Platform, Store } from '../../types'
 import { PLATFORM_COLORS } from '../../lib/platformConfig'
 import OperationalMap, { DISPATCH_GHOST_MS } from './OperationalMap'
 import type { HighlightFinalized, OrderMarkerState } from './OperationalMap'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import './Operational.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -266,6 +267,7 @@ export default function Operational() {
   const [orderDriverMap, setOrderDriverMap] = useState<Record<string, string>>({})
   const [inProgress, setInProgress]       = useState<InProgressEntry[]>([])
   const [loadingAction, setLoadingAction] = useState<string | null>(null) // suggestionId being acted upon
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false)
   const [editingSuggId, setEditingSuggId] = useState<string | null>(null)
   const [loading, setLoading]             = useState(true)
   const [popupOrderId, setPopupOrderId]   = useState<string | null>(null)
@@ -622,13 +624,13 @@ export default function Operational() {
     await fetchAll()
   }
 
-  async function handleBulkReject() {
+  function handleBulkReject() {
     if (suggestions.length < 2) return
-    const ok = window.confirm(
-      `Recusar todas as ${suggestions.length} sugestões pendentes? Os pedidos voltam à fila.`,
-    )
-    if (!ok) return
+    setBulkRejectOpen(true)
+  }
 
+  async function confirmBulkReject() {
+    setBulkRejectOpen(false)
     setLoadingAction('__bulk__')
     for (const s of suggestions) {
       // reuse single handler to keep audit/logic consistent
@@ -1236,6 +1238,17 @@ export default function Operational() {
           onClose={() => setEditingSuggId(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={bulkRejectOpen}
+        variant="danger"
+        title="Recusar todas as sugestões?"
+        message={`Isso vai recusar ${suggestions.length} sugestões pendentes. Os pedidos voltam à fila e serão reagrupados.`}
+        confirmLabel="Recusar todas"
+        cancelLabel="Cancelar"
+        onConfirm={confirmBulkReject}
+        onCancel={() => setBulkRejectOpen(false)}
+      />
     </div>
   )
 }
