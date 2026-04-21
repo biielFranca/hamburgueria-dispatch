@@ -284,11 +284,16 @@ export default function Orders() {
     }
     setRefreshing(true)
 
+    // Active orders older than 8h are hidden from the pedidos list and live
+    // only in Relatórios. Matches the map cutoff in Operational.
+    const since8h = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
+
     const { data, error } = await supabase
       .from('orders')
       .select('id,store_id,platform,platform_order_id,platform_order_code,customer_name,customer_phone,address_street,address_number,address_complement,address_neighborhood,address_city,address_zip,latitude,longitude,items,total_amount,payment_method,delivery_type,logistics_type,status,route_eligibility,route_block_reason,rejection_count,estimated_delivery_at,dispatched_at,created_at,updated_at')
       .eq('store_id', storeId)
       .not('status', 'in', '("delivered","cancelled")')
+      .gte('created_at', since8h)
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE + 1)
 
@@ -308,11 +313,13 @@ export default function Orders() {
     if (loadingMore || !hasMore || orders.length === 0 || !storeId) return
     setLoadingMore(true)
     const cursor = orders[orders.length - 1].created_at
+    const since8h = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
     const { data, error } = await supabase
       .from('orders')
       .select('id,store_id,platform,platform_order_id,platform_order_code,customer_name,customer_phone,address_street,address_number,address_complement,address_neighborhood,address_city,address_zip,latitude,longitude,items,total_amount,payment_method,delivery_type,logistics_type,status,route_eligibility,route_block_reason,rejection_count,estimated_delivery_at,dispatched_at,created_at,updated_at')
       .eq('store_id', storeId)
       .not('status', 'in', '("delivered","cancelled")')
+      .gte('created_at', since8h)
       .lt('created_at', cursor)
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE + 1)

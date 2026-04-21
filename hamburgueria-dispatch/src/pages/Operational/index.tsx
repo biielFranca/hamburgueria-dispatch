@@ -348,6 +348,10 @@ export default function Operational() {
     const myGen = ++fetchGenRef.current
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    // Active orders older than 8h drop off the map and live only in Relatórios.
+    // Avoids stale-queue buildup when a platform replays historical data
+    // (e.g. Cardápio Web polling backfill on first connect).
+    const since8h = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
 
     const [storeRes, driversRes, ordersRes, suggestionsRes, finalizedRes] = await Promise.all([
       supabase.from('stores').select('id,name,address,phone,logo_url,latitude,longitude,active,created_at').eq('id', sid).single(),
@@ -355,6 +359,7 @@ export default function Operational() {
       supabase.from('orders').select(ORDER_COLUMNS)
         .eq('store_id', sid)
         .not('status', 'in', '("delivered","cancelled")')
+        .gte('created_at', since8h)
         .order('rejection_count', { ascending: false })
         .order('created_at', { ascending: false }),
       // Hydrate suggestion orders locally from the orders array above using
