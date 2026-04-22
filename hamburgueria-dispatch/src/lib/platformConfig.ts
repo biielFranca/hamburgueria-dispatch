@@ -5,6 +5,7 @@ export const PLATFORM_COLORS: Record<Platform, string> = {
   keeta:        '#27AE60',
   '99food':     '#F5A623',
   cardapio_web: '#8B5CF6',
+  aiqfome:      '#E84C3D',
 }
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -12,6 +13,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   keeta:        'Keeta',
   '99food':     '99Food',
   cardapio_web: 'Cardápio Web',
+  aiqfome:      'aiqfome',
 }
 
 export const PLATFORM_LABELS_SHORT: Record<Platform, string> = {
@@ -19,6 +21,7 @@ export const PLATFORM_LABELS_SHORT: Record<Platform, string> = {
   keeta:        'Keeta',
   '99food':     '99Food',
   cardapio_web: 'Cárd. Web',
+  aiqfome:      'aiqfome',
 }
 
 export const PLATFORM_FALLBACK_COLOR = '#666677'
@@ -53,15 +56,30 @@ const SOURCE_CHANNEL_TO_PLATFORM: Record<string, Platform> = {
   IFOOD:            'ifood',
   '99FOOD':         '99food',
   KEETA:            'keeta',
-  AIQFOME:          'cardapio_web', // no dedicated Platform key yet
+  AIQFOME:          'aiqfome',
   CARDAPIO_WEB_OWN: 'cardapio_web',
 }
 
+const KNOWN_PLATFORMS: ReadonlySet<Platform> = new Set(
+  Object.keys(PLATFORM_COLORS) as Platform[],
+)
+
+function isPlatform(value: string | null | undefined): value is Platform {
+  return !!value && KNOWN_PLATFORMS.has(value as Platform)
+}
+
+/**
+ * Resolves the UI-facing platform for an order, preferring the real origin
+ * (`source_channel`, set by Open Delivery/Cardápio Web aggregation) over the
+ * adapter `platform` column. Always returns a known `Platform` — unknown
+ * values fall back to `cardapio_web` so colors/labels never break.
+ */
 export function effectivePlatform(
   order: { platform: string; source_channel?: string | null } | null | undefined,
-): Platform | string {
+): Platform {
   if (!order) return 'cardapio_web'
   const sc = order.source_channel?.toUpperCase()
   if (sc && SOURCE_CHANNEL_TO_PLATFORM[sc]) return SOURCE_CHANNEL_TO_PLATFORM[sc]
-  return order.platform
+  if (isPlatform(order.platform)) return order.platform
+  return 'cardapio_web'
 }

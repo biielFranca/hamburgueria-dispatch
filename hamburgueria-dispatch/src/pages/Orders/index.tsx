@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/auth/AuthBootstrap'
 import type { Order, Platform } from '../../types'
 import { PLATFORMS, effectivePlatform } from '../../lib/platformConfig'
+import { activeOrderCutoffIso } from '../../lib/orderActivity'
 import OrderForm from '../../components/OrderForm'
 import './Orders.css'
 
@@ -286,7 +287,7 @@ export default function Orders() {
 
     // Active orders older than 8h are hidden from the pedidos list and live
     // only in Relatórios. Matches the map cutoff in Operational.
-    const since8h = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
+    const since8h = activeOrderCutoffIso()
 
     const { data, error } = await supabase
       .from('orders')
@@ -313,7 +314,7 @@ export default function Orders() {
     if (loadingMore || !hasMore || orders.length === 0 || !storeId) return
     setLoadingMore(true)
     const cursor = orders[orders.length - 1].created_at
-    const since8h = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
+    const since8h = activeOrderCutoffIso()
     const { data, error } = await supabase
       .from('orders')
       .select('id,store_id,platform,platform_order_id,platform_order_code,customer_name,customer_phone,address_street,address_number,address_complement,address_neighborhood,address_city,address_zip,latitude,longitude,items,total_amount,payment_method,delivery_type,logistics_type,status,route_eligibility,route_block_reason,rejection_count,estimated_delivery_at,dispatched_at,created_at,updated_at')

@@ -7,6 +7,7 @@ import { fetchRouteGeometry, findOptimalSequence } from '../../lib/routeEngine'
 import { logOrderEvent } from '../../lib/orderEvents'
 import type { Driver, Order, Platform, Store } from '../../types'
 import { PLATFORM_COLORS, effectivePlatform } from '../../lib/platformConfig'
+import { activeOrderCutoffIso } from '../../lib/orderActivity'
 import OperationalMap, { DISPATCH_GHOST_MS } from './OperationalMap'
 import type { HighlightFinalized, OrderMarkerState } from './OperationalMap'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
@@ -191,7 +192,7 @@ function SuggestionBlock({
         {suggestion.orders.map((order, idx) => (
           <div key={order.id} className="sug-stop">
             <span className="sug-stop-num">{idx + 1}</span>
-            <span className="sug-stop-dot" style={{ background: PLATFORM_COLORS[effectivePlatform(order) as Platform] ?? '#666677' }} />
+            <span className="sug-stop-dot" style={{ background: PLATFORM_COLORS[effectivePlatform(order)] }} />
             <div className="sug-stop-info">
               <div className="sug-stop-customer">{order.customer_name}</div>
               <div className="sug-stop-address">{shortAddress(order)}</div>
@@ -349,10 +350,7 @@ export default function Operational() {
     const myGen = ++fetchGenRef.current
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    // Active orders older than 8h drop off the map and live only in Relatórios.
-    // Avoids stale-queue buildup when a platform replays historical data
-    // (e.g. Cardápio Web polling backfill on first connect).
-    const since8h = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
+    const since8h = activeOrderCutoffIso()
 
     const [storeRes, driversRes, ordersRes, suggestionsRes, finalizedRes] = await Promise.all([
       supabase.from('stores').select('id,name,address,phone,logo_url,latitude,longitude,active,created_at').eq('id', sid).single(),
@@ -855,7 +853,7 @@ export default function Operational() {
     const now = Date.now()
 
     for (const order of orders) {
-      const platformColor = PLATFORM_COLORS[effectivePlatform(order) as Platform] ?? '#666677'
+      const platformColor = PLATFORM_COLORS[effectivePlatform(order)]
       let state: OrderMarkerState
 
       // Border always follows platform, fill always follows current status.
@@ -961,7 +959,7 @@ export default function Operational() {
             ? [entry.latitude, entry.longitude]
             : geocodedCoords[entry.id] ?? null
         return coord
-          ? { coord, code: entry.code, platformColor: PLATFORM_COLORS[effectivePlatform(entry) as Platform] ?? '#666677' }
+          ? { coord, code: entry.code, platformColor: PLATFORM_COLORS[effectivePlatform(entry)] }
           : null
       })
       .filter(Boolean) as HighlightFinalized[]
@@ -1105,7 +1103,7 @@ export default function Operational() {
                   ? [f.latitude, f.longitude]
                   : geocodedCoords[f.id] ?? null
               return coord
-                ? { coord, code: f.code, platformColor: PLATFORM_COLORS[effectivePlatform(f) as Platform] ?? '#666677' }
+                ? { coord, code: f.code, platformColor: PLATFORM_COLORS[effectivePlatform(f)] }
                 : null
             })()}
           />
@@ -1397,7 +1395,7 @@ function EditSuggestionModal({
               return (
                 <div key={order.id} className="edit-stop">
                   <span className="edit-stop-num">{idx + 1}</span>
-                  <span className="edit-stop-dot" style={{ background: PLATFORM_COLORS[effectivePlatform(order) as Platform] ?? '#666677' }} />
+                  <span className="edit-stop-dot" style={{ background: PLATFORM_COLORS[effectivePlatform(order)] }} />
                   <div className="edit-stop-info">
                     <div className="edit-stop-customer">{order.customer_name}</div>
                     <div className="edit-stop-address">{shortAddress(order)}</div>
@@ -1474,7 +1472,7 @@ function EditSuggestionModal({
                       className="edit-picker-item"
                       onClick={() => addOrder(order)}
                     >
-                      <span className="edit-picker-dot" style={{ background: PLATFORM_COLORS[effectivePlatform(order) as Platform] ?? '#666677' }} />
+                      <span className="edit-picker-dot" style={{ background: PLATFORM_COLORS[effectivePlatform(order)] }} />
                       <div className="edit-picker-info">
                         <div className="edit-picker-customer">{order.customer_name}</div>
                         <div className="edit-picker-address">{shortAddress(order)}</div>
@@ -1511,7 +1509,7 @@ function FinalizedBlock({ entry, isSelected, isGeocoding, onClick }: {
   isGeocoding: boolean
   onClick: () => void
 }) {
-  const platformColor = PLATFORM_COLORS[effectivePlatform(entry) as Platform] ?? '#666677'
+  const platformColor = PLATFORM_COLORS[effectivePlatform(entry)]
   const st = FINALIZED_STATUS_LABEL[entry.status] ?? { label: entry.status, color: '#888' }
   const hasAddress = !!(entry.addressStreet || entry.addressZip || entry.latitude != null)
 
@@ -1562,7 +1560,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 function OrderDetailPopup({ order, onClose }: { order: Order; onClose: () => void }) {
-  const platformColor = PLATFORM_COLORS[effectivePlatform(order) as Platform] ?? '#666677'
+  const platformColor = PLATFORM_COLORS[effectivePlatform(order)]
   const address = [
     order.address_street,
     order.address_number,

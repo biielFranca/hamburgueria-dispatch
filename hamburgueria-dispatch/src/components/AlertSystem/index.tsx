@@ -39,8 +39,8 @@ interface AlertItem {
 // ── Alert card ────────────────────────────────────────────────────────────────
 
 function AlertCard({ alert, onDismiss }: { alert: AlertItem; onDismiss: (uid: string) => void }) {
-  const displayPlatform = effectivePlatform(alert) as Platform
-  const color = PLATFORM_COLORS[displayPlatform] ?? '#666677'
+  const displayPlatform = effectivePlatform(alert)
+  const color = PLATFORM_COLORS[displayPlatform]
   const elapsed = Date.now() - alert.createdAt
   const pct = Math.max(0, 1 - elapsed / DISMISS_MS)
 
@@ -55,7 +55,7 @@ function AlertCard({ alert, onDismiss }: { alert: AlertItem; onDismiss: (uid: st
       <div className="alert-header">
         <div className="alert-platform">
           <span className="alert-platform-dot" style={{ background: color }} />
-          <span className="alert-platform-name">{PLATFORM_LABELS[displayPlatform] ?? alert.platform}</span>
+          <span className="alert-platform-name">{PLATFORM_LABELS[displayPlatform]}</span>
         </div>
         <span className="alert-order-code">{alert.orderCode}</span>
         <span className={`alert-badge ${alert.level}`}>{badgeLabel[alert.level]}</span>

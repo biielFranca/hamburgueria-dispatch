@@ -88,16 +88,38 @@ function parseNumber(...values: unknown[]): number | null {
 }
 
 // Cardápio Web returns sentinel coords when it can't geocode the address.
-// Observed sentinels:
+// Observed sentinels (explicit known fallbacks):
 //   (-10.3333333, -53.2)   → Brazil geographic center (no address / platform pickup)
 //   (-24, -47)             → SP-state round fallback (99FOOD aggregator)
+// Plus generic red flags:
+//   (0, 0)                 → "null island", classic uninitialized value
+//   integer lat AND lng    → almost never a real address (precision < ~100 km)
+//   outside Brazil bbox    → not a valid BR delivery coord
 // Treating these as null prevents pins from landing far from the real address
 // on the operational map.
-function isSentinelCoord(lat: number | null, lng: number | null): boolean {
+export function isSentinelCoord(lat: number | null, lng: number | null): boolean {
   if (lat == null || lng == null) return false
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true
+
   const near = (a: number, b: number, eps = 0.0001) => Math.abs(a - b) < eps
+
+  // (0, 0) — null island
+  if (near(lat, 0) && near(lng, 0)) return true
+
+  // Known explicit sentinels observed in prod
   if (near(lat, -10.3333333) && near(lng, -53.2)) return true
   if (near(lat, -24) && near(lng, -47)) return true
+
+  // Outside Brazil bounding box (approx.)
+  //   lat: -34 (Chuí/RS) .. +6 (Monte Caburaí/RR)
+  //   lng: -74 (Serra do Divisor/AC) .. -34 (Ponta do Seixas/PB)
+  if (lat < -34 || lat > 6 || lng < -74 || lng > -34) return true
+
+  // Both values are effectively integers → the platform rounded to whole degrees,
+  // which can't describe any real street address (~111 km per degree).
+  const isRoundInt = (v: number) => Math.abs(v - Math.round(v)) < 0.001
+  if (isRoundInt(lat) && isRoundInt(lng)) return true
+
   return false
 }
 

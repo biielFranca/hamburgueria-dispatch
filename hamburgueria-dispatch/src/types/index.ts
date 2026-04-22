@@ -1,4 +1,4 @@
-export type Platform = 'ifood' | '99food' | 'cardapio_web' | 'keeta'
+export type Platform = 'ifood' | '99food' | 'cardapio_web' | 'keeta' | 'aiqfome'
 
 export type UserRole = 'owner' | 'admin' | 'operator'
 
