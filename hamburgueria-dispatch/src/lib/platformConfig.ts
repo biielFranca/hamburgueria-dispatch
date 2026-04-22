@@ -41,3 +41,27 @@ export const PLATFORMS: { key: Platform; label: string; color: string }[] = (
   label: PLATFORM_LABELS[key],
   color: PLATFORM_COLORS[key],
 }))
+
+// Maps the real origin (`source_channel` from Cardápio Web aggregation,
+// Open Delivery normalization, etc.) back onto a Platform key for UI
+// display. Without this, a 99Food order that flowed through Cardápio Web
+// would be labelled "Cardápio Web" on the map and orders list.
+//
+// source_channel values (uppercase, produced by openDelivery + cardapioWebNative):
+//   IFOOD, 99FOOD, KEETA, AIQFOME, CARDAPIO_WEB_OWN
+const SOURCE_CHANNEL_TO_PLATFORM: Record<string, Platform> = {
+  IFOOD:            'ifood',
+  '99FOOD':         '99food',
+  KEETA:            'keeta',
+  AIQFOME:          'cardapio_web', // no dedicated Platform key yet
+  CARDAPIO_WEB_OWN: 'cardapio_web',
+}
+
+export function effectivePlatform(
+  order: { platform: string; source_channel?: string | null } | null | undefined,
+): Platform | string {
+  if (!order) return 'cardapio_web'
+  const sc = order.source_channel?.toUpperCase()
+  if (sc && SOURCE_CHANNEL_TO_PLATFORM[sc]) return SOURCE_CHANNEL_TO_PLATFORM[sc]
+  return order.platform
+}

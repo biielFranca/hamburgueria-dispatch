@@ -17,7 +17,7 @@ import { useAuth } from '../auth/AuthBootstrap'
 import { playAlert, isMuted, toggleMute } from '../../lib/alertSound'
 import { notify, requestNotificationPermission } from '../../lib/notify'
 import type { Order, Platform } from '../../types'
-import { PLATFORM_COLORS, PLATFORM_LABELS_SHORT as PLATFORM_LABELS } from '../../lib/platformConfig'
+import { PLATFORM_COLORS, PLATFORM_LABELS_SHORT as PLATFORM_LABELS, effectivePlatform } from '../../lib/platformConfig'
 import './AlertSystem.css'
 
 const DISMISS_MS = 7_000
@@ -25,20 +25,22 @@ const DISMISS_MS = 7_000
 type AlertLevel = 'warning' | 'urgent' | 'overdue'
 
 interface AlertItem {
-  uid:        string
-  orderId:    string
-  orderCode:  string
-  platform:   Platform
-  level:      AlertLevel
-  message:    string
-  createdAt:  number
-  dismissing: boolean
+  uid:            string
+  orderId:        string
+  orderCode:      string
+  platform:       Platform
+  source_channel: string | null
+  level:          AlertLevel
+  message:        string
+  createdAt:      number
+  dismissing:     boolean
 }
 
 // ── Alert card ────────────────────────────────────────────────────────────────
 
 function AlertCard({ alert, onDismiss }: { alert: AlertItem; onDismiss: (uid: string) => void }) {
-  const color = PLATFORM_COLORS[alert.platform]
+  const displayPlatform = effectivePlatform(alert) as Platform
+  const color = PLATFORM_COLORS[displayPlatform] ?? '#666677'
   const elapsed = Date.now() - alert.createdAt
   const pct = Math.max(0, 1 - elapsed / DISMISS_MS)
 
@@ -53,7 +55,7 @@ function AlertCard({ alert, onDismiss }: { alert: AlertItem; onDismiss: (uid: st
       <div className="alert-header">
         <div className="alert-platform">
           <span className="alert-platform-dot" style={{ background: color }} />
-          <span className="alert-platform-name">{PLATFORM_LABELS[alert.platform]}</span>
+          <span className="alert-platform-name">{PLATFORM_LABELS[displayPlatform] ?? alert.platform}</span>
         </div>
         <span className="alert-order-code">{alert.orderCode}</span>
         <span className={`alert-badge ${alert.level}`}>{badgeLabel[alert.level]}</span>
@@ -148,14 +150,15 @@ export default function AlertSystem() {
     }
 
     const item: AlertItem = {
-      uid:       `${key}-${Date.now()}`,
-      orderId:   order.id,
-      orderCode: code,
-      platform:  order.platform,
+      uid:            `${key}-${Date.now()}`,
+      orderId:        order.id,
+      orderCode:      code,
+      platform:       order.platform,
+      source_channel: order.source_channel ?? null,
       level,
-      message:   messages[level],
-      createdAt: Date.now(),
-      dismissing: false,
+      message:        messages[level],
+      createdAt:      Date.now(),
+      dismissing:     false,
     }
 
     const soundLevel = level === 'warning' ? '5min' : level === 'urgent' ? '1min' : 'critical'

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/auth/AuthBootstrap'
 import type { Order, Platform } from '../../types'
-import { PLATFORMS } from '../../lib/platformConfig'
+import { PLATFORMS, effectivePlatform } from '../../lib/platformConfig'
 import OrderForm from '../../components/OrderForm'
 import './Orders.css'
 
@@ -121,7 +121,7 @@ function OrderModal({ order, onClose }: { order: Order | null; onClose: () => vo
 
   if (!displayed) return null
 
-  const platform = PLATFORMS.find(p => p.key === displayed.platform)
+  const platform = PLATFORMS.find(p => p.key === effectivePlatform(displayed))
   const code = displayed.platform_order_code || displayed.platform_order_id.slice(0, 8).toUpperCase()
 
   return (
@@ -364,8 +364,10 @@ export default function Orders() {
     if (fresh && fresh !== selectedOrder) setSelectedOrder(fresh)
   }, [orders, selectedOrder])
 
+  // Group by effective platform (source_channel-aware) so a 99Food order
+  // that flowed via Cardápio Web lands in the 99Food column, not CW.
   const ordersByPlatform = (platform: Platform) =>
-    orders.filter(o => o.platform === platform)
+    orders.filter(o => effectivePlatform(o) === platform)
 
   if (loading) return <div className="orders-panel"><div className="orders-loading">Carregando pedidos...</div></div>
   if (error)   return <div className="orders-panel"><div className="orders-error">{error}</div></div>
