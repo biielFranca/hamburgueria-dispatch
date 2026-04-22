@@ -87,6 +87,20 @@ function parseNumber(...values: unknown[]): number | null {
   return null
 }
 
+// Cardápio Web returns sentinel coords when it can't geocode the address.
+// Observed sentinels:
+//   (-10.3333333, -53.2)   → Brazil geographic center (no address / platform pickup)
+//   (-24, -47)             → SP-state round fallback (99FOOD aggregator)
+// Treating these as null prevents pins from landing far from the real address
+// on the operational map.
+function isSentinelCoord(lat: number | null, lng: number | null): boolean {
+  if (lat == null || lng == null) return false
+  const near = (a: number, b: number, eps = 0.0001) => Math.abs(a - b) < eps
+  if (near(lat, -10.3333333) && near(lng, -53.2)) return true
+  if (near(lat, -24) && near(lng, -47)) return true
+  return false
+}
+
 // ── integration lookup ───────────────────────────────────────────────────────
 export async function getIntegrationByMerchantId(
   merchantId: number,
@@ -232,8 +246,12 @@ export function mapOrderToInsert(
     address_neighborhood: parseString(address?.neighborhood),
     address_city: parseString(address?.city),
     address_zip: parseString(address?.zip_code, address?.postal_code),
-    latitude: parseNumber(address?.latitude),
-    longitude: parseNumber(address?.longitude),
+    latitude: isSentinelCoord(parseNumber(address?.latitude), parseNumber(address?.longitude))
+      ? null
+      : parseNumber(address?.latitude),
+    longitude: isSentinelCoord(parseNumber(address?.latitude), parseNumber(address?.longitude))
+      ? null
+      : parseNumber(address?.longitude),
     items: normalizeItems(order),
     total_amount: parseNumber((order as any).total) ?? 0,
     payment_method: pickPayment(order),
