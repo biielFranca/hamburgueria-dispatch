@@ -36,7 +36,7 @@ describe('startClassifier (Realtime subscription)', () => {
   it('subscribes to INSERT events on orders table', () => {
     const stop = startClassifier('s1')
     expect(mocks.on).toHaveBeenCalled()
-    const [eventType, config] = mocks.on.mock.calls[0]
+    const [eventType, config] = mocks.on.mock.calls[0] as [string, Record<string, unknown>]
     expect(eventType).toBe('postgres_changes')
     expect(config).toMatchObject({ event: 'INSERT', schema: 'public', table: 'orders' })
     expect(mocks.subscribe).toHaveBeenCalled()
