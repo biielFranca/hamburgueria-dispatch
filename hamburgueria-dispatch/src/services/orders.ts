@@ -7,6 +7,7 @@ export async function fetchOrders(storeId: string) {
     .select('*')
     .eq('store_id', storeId)
     .order('created_at', { ascending: false })
+    .limit(500)
 }
 
 export async function updateOrder(id: string, patch: Partial<Order>) {

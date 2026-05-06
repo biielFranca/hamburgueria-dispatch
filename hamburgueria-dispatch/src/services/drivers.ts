@@ -7,6 +7,7 @@ export async function fetchDrivers(storeId: string) {
     .select('*')
     .eq('store_id', storeId)
     .order('name')
+    .limit(200)
 }
 
 export async function insertDriver(driver: Omit<Driver, 'id' | 'created_at'>) {

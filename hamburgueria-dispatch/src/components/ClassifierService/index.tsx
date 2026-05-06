@@ -12,7 +12,7 @@ import { useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { startClassifier, classifyPendingOrders } from '../../lib/classifier'
 
-const CLASSIFIER_POLL_MS   = 5_000
+const CLASSIFIER_POLL_MS   = 30_000
 const BACKEND_ENABLED      = import.meta.env.VITE_BACKEND_CLASSIFIER === 'true'
 
 export default function ClassifierService() {

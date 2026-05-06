@@ -7,6 +7,7 @@ export async function fetchUsers(storeId: string) {
     .select('*')
     .eq('store_id', storeId)
     .order('name')
+    .limit(200)
 }
 
 export async function insertUser(user: Omit<User, 'id' | 'created_at'>) {

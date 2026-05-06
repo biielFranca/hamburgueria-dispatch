@@ -43,12 +43,13 @@ export async function fetchRouteGeometry(
 async function fetchEligibleOrders(storeId: string): Promise<Order[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*')
+    .select('id, store_id, platform_order_code, latitude, longitude, status, route_eligibility, rejection_count, created_at')
     .eq('store_id', storeId)
     .eq('route_eligibility', 'eligible')
     .eq('status', 'awaiting_route')
     .order('rejection_count', { ascending: false })
     .order('created_at', { ascending: true })
+    .limit(50)
 
   if (error) throw new Error(error.message ?? JSON.stringify(error))
   return (data ?? []) as Order[]
@@ -315,7 +316,7 @@ export async function runRouteEngine(storeId: string): Promise<RouteEngineResult
   try {
     // Get store coordinates
     const { data: storeData } = await supabase
-      .from('stores').select('*').eq('id', storeId).single()
+      .from('stores').select('id, latitude, longitude').eq('id', storeId).single()
     const store = storeData as Store | null
     if (!store?.latitude || !store?.longitude) {
       return { outcome: 'no_store_coords' }

@@ -81,9 +81,10 @@ export function classifyOrder(order: Order): ClassificationResult {
 export async function classifyPendingOrders(storeId: string): Promise<void> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*')
+    .select('id, store_id, delivery_type, logistics_type, status, latitude, longitude, address_street, address_number, address_neighborhood, address_city, address_zip, route_eligibility, rejection_count, estimated_delivery_at, created_at, updated_at')
     .eq('store_id', storeId)
     .eq('status', 'normalized')
+    .limit(50)
 
   if (error || !data?.length) return
 
