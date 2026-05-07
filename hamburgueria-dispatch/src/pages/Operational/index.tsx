@@ -66,6 +66,28 @@ interface FinalizedEntry {
   addressZip:          string | null
 }
 
+// ── Constants: explicit column lists ──────────────────────────────────────────
+//
+// Explicit columns instead of select('*'): every byte of the row payload
+// crosses the wire on each fetchAll/Realtime cycle. Listing only what the
+// Operational UI uses keeps egress predictable as the schema grows.
+
+const ORDER_COLUMNS = [
+  'id', 'store_id', 'platform', 'platform_order_id', 'platform_order_code',
+  'customer_name',
+  'address_street', 'address_number', 'address_neighborhood', 'address_city', 'address_zip',
+  'latitude', 'longitude',
+  'total_amount',
+  'delivery_type', 'logistics_type',
+  'status', 'route_eligibility', 'route_block_reason',
+  'rejection_count',
+  'estimated_delivery_at', 'dispatched_at',
+  'created_at', 'updated_at',
+].join(',')
+
+const SUGGESTION_COLUMNS =
+  'id,store_id,assigned_driver_id,status,suggested_sequence,predicted_eta,suggestion_version,created_at'
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatCurrency(v: number) {
@@ -327,21 +349,22 @@ export default function Operational() {
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
     const [storeRes, driversRes, ordersRes, suggestionsRes, finalizedRes] = await Promise.all([
-      supabase.from('stores').select('*').eq('id', sid).single(),
-      supabase.from('drivers').select('*').eq('store_id', sid).eq('active', true).order('name'),
-      supabase.from('orders').select('*')
+      supabase.from('stores').select('id,name,address,phone,logo_url,latitude,longitude,active,created_at').eq('id', sid).single(),
+      supabase.from('drivers').select('id,store_id,name,active,created_at').eq('store_id', sid).eq('active', true).order('name'),
+      supabase.from('orders').select(ORDER_COLUMNS)
         .eq('store_id', sid)
         .not('status', 'in', '("delivered","cancelled")')
         .order('rejection_count', { ascending: false })
         .order('created_at', { ascending: false }),
-      // Single-query JOIN: suggestions + their orders via the FK
-      // dispatch_suggestion_orders.suggestion_id. Cuts 2 round-trips.
+      // Hydrate suggestion orders locally from the orders array above using
+      // suggested_sequence (array of order IDs already on the row). Avoids
+      // duplicating every Order payload inside an FK embed on every cycle.
       supabase.from('dispatch_suggestions')
-        .select('*, dispatch_suggestion_orders(position, order:orders(*))')
+        .select(SUGGESTION_COLUMNS)
         .eq('store_id', sid)
         .eq('status', 'pending_review')
         .order('created_at', { ascending: false }),
-      supabase.from('orders').select('*')
+      supabase.from('orders').select(ORDER_COLUMNS)
         .eq('store_id', sid)
         .in('status', ['dispatched', 'delivered', 'cancelled'])
         .gte('updated_at', since24h)
@@ -349,32 +372,34 @@ export default function Operational() {
         .limit(100),
     ])
 
-    const fetchedOrders  = (ordersRes.data ?? []) as Order[]
-    const rawSuggestions = (suggestionsRes.data ?? []) as Array<
-      Record<string, unknown> & {
-        suggested_sequence: string[]
-        dispatch_suggestion_orders?: Array<{ position: number; order: Order | null }>
-      }
-    >
+    const fetchedOrders  = (ordersRes.data ?? []) as unknown as Order[]
+    const rawSuggestions = (suggestionsRes.data ?? []) as Array<{
+      id: string
+      store_id: string
+      assigned_driver_id: string | null
+      status: string
+      suggested_sequence: string[] | null
+      predicted_eta: number | null
+      suggestion_version: number
+      created_at: string
+    }>
 
-    // Build per-suggestion order lookup from the embedded JOIN. Falls back
-    // to an empty list if FK embed returned nothing (keeps render safe).
+    // Local hydration: build an order-by-id map from the orders we already
+    // fetched above, then resolve suggested_sequence against it. Orders that
+    // aren't in the active-orders snapshot (e.g. raced to delivered between
+    // queries) are silently skipped — preserving previous join behavior.
+    const orderById = new Map<string, Order>(fetchedOrders.map(o => [o.id, o]))
     const enriched: SuggestionRow[] = rawSuggestions.map(s => {
-      const joined = s.dispatch_suggestion_orders ?? []
-      const byId = new Map<string, Order>()
-      for (const row of joined) {
-        if (row.order) byId.set(row.order.id, row.order)
+      const sequence = s.suggested_sequence ?? []
+      const ordered = sequence.map(id => orderById.get(id)).filter(Boolean) as Order[]
+      if (ordered.length !== sequence.length) {
+        console.warn(`[Operational] suggestion ${s.id.slice(0, 8)} has ${sequence.length - ordered.length} unresolved order id(s)`)
       }
-      const ordered = (s.suggested_sequence ?? [])
-        .map(id => byId.get(id))
-        .filter(Boolean) as Order[]
-      // Drop the embedded join field from the row we surface to UI
-      const { dispatch_suggestion_orders: _omit, ...rest } = s
-      return { ...(rest as Record<string, unknown>), orders: ordered } as SuggestionRow
+      return { ...s, suggested_sequence: sequence, orders: ordered } as SuggestionRow
     })
 
     // ── Driver by order map (for finalized list + map highlight) ───────────
-    const finalizedOrders = (finalizedRes.data ?? []) as Order[]
+    const finalizedOrders = (finalizedRes.data ?? []) as unknown as Order[]
     const allRelevantOrderIds = [
       ...new Set([...fetchedOrders, ...finalizedOrders].map(o => o.id)),
     ]
