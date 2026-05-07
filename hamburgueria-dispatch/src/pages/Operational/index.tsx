@@ -294,6 +294,7 @@ export default function Operational() {
   const [editingSuggId, setEditingSuggId] = useState<string | null>(null)
   const [loading, setLoading]             = useState(true)
   const [popupOrderId, setPopupOrderId]   = useState<string | null>(null)
+  const [realtimeOnline, setRealtimeOnline] = useState(true)
   const { storeId, isReady }              = useAuth()
   const driverFilterRef                   = useRef<HTMLDivElement | null>(null)
   // Monotonic generation counter — guards enrichment race: only the last
@@ -557,16 +558,27 @@ export default function Operational() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, scheduleFetch)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatch_suggestions' }, scheduleFetch)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, scheduleFetch)
-      .subscribe()
+      .subscribe(status => {
+        // Header dot turns red when Realtime drops so the operator notices
+        // staleness instead of trusting a frozen panel.
+        setRealtimeOnline(status === 'SUBSCRIBED')
+      })
 
-    // Poll fallback: refreshes panel even when Realtime events don't fire
-    // (Supabase requires REPLICA IDENTITY FULL for reliable change events)
-    const pollTimer = setInterval(fetchAll, 10_000)
+    // Slow safety-net poll. Realtime is the primary update path; this only
+    // kicks in if a channel drops silently. 60s (vs. previous 10s) cuts
+    // baseline egress 6x without changing perceived latency.
+    const pollTimer = setInterval(fetchAll, 60_000)
+
+    // Reconnecting after network drop should resync immediately rather than
+    // wait up to 60s for the next poll tick.
+    const onOnline = () => { scheduleFetch() }
+    window.addEventListener('online', onOnline)
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer)
       supabase.removeChannel(channel)
       clearInterval(pollTimer)
+      window.removeEventListener('online', onOnline)
     }
   }, [storeId, isReady]) // eslint-disable-line
 
@@ -983,7 +995,21 @@ export default function Operational() {
 
       {/* Stats header */}
       <div className="op-header">
-        <h1>Painel Operacional</h1>
+        <h1>
+          Painel Operacional
+          <span
+            title={realtimeOnline ? 'Tempo real conectado' : 'Tempo real desconectado — usando fallback de 60s'}
+            style={{
+              display: 'inline-block',
+              marginLeft: 10,
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: realtimeOnline ? '#22c55e' : '#ef4444',
+              verticalAlign: 'middle',
+            }}
+          />
+        </h1>
         <div className="op-stats">
           <div className="op-stat">
             <span className="op-stat-dot" style={{ background: '#facc15' }} />
