@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { useStoreId } from '../../hooks/useStoreId'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import type { InventoryItem, StockMovement, CatalogItem } from '../../types'
 import './Estoque.css'
 
@@ -163,7 +163,7 @@ function AdjustModal({ item, storeId, onClose, onDone }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Estoque() {
-  const { storeId } = useStoreId()
+  const { storeId } = useAuth()
   const [tab, setTab]               = useState<Tab>('stock')
   const [items, setItems]           = useState<InventoryItem[]>([])
   const [movements, setMovements]   = useState<(StockMovement & { item_name?: string })[]>([])

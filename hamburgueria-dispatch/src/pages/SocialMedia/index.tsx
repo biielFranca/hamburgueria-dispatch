@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import './SocialMedia.css'
 
 const PLATFORMS = [
@@ -105,26 +106,18 @@ export default function SocialMedia() {
   const [success, setSuccess]   = useState<Partial<Record<PlatformKey, boolean>>>({})
   const [loading, setLoading]   = useState(true)
   const [dbError, setDbError]   = useState('')
-  const storeIdRef = useRef<string | null>(null)
+  const { storeId, isReady } = useAuth()
 
   useEffect(() => {
-    async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) { setLoading(false); return }
-      storeIdRef.current = userData.store_id
-      await fetchLinks(userData.store_id)
-    }
-    init()
-  }, [])
+    if (!isReady) return
+    if (!storeId) { setLoading(false); return }
+    fetchLinks()
+  }, [storeId, isReady]) // eslint-disable-line
 
-  async function fetchLinks(storeId?: string) {
-    const sid = storeId ?? storeIdRef.current
-    if (!sid) return
+  async function fetchLinks() {
+    if (!storeId) return
     const { data, error } = await supabase
-      .from('store_social_links').select('*').eq('store_id', sid)
+      .from('store_social_links').select('*').eq('store_id', storeId)
     if (error) {
       setDbError('Tabela store_social_links não encontrada. Rode a migration necessária.')
       setLoading(false)
@@ -143,7 +136,7 @@ export default function SocialMedia() {
   }
 
   async function handleSave(platformKey: PlatformKey) {
-    const sid = storeIdRef.current
+    const sid = storeId
     if (!sid) return
 
     const url = (drafts[platformKey] ?? '').trim()

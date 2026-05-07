@@ -3,6 +3,7 @@ import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import { syncIfood } from '../../lib/ifood'
 import { pollOpenDeliveryEvents } from '../../lib/integrations/openDelivery'
 import { fetchAddressByCep } from '../../lib/cep'
@@ -650,26 +651,8 @@ function TabPlan() {
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
-  const [storeId, setStoreId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) {
-        setLoading(false)
-        return
-      }
-      const { data: userData } = await supabase
-        .from('users')
-        .select('store_id')
-        .eq('auth_id', authData.user.id)
-        .single()
-      if (userData) setStoreId(userData.store_id)
-      setLoading(false)
-    }
-    init()
-  }, [])
+  const { storeId, isReady } = useAuth()
+  const loading = !isReady
 
   const TABS: { key: SettingsTab; label: string }[] = [
     { key: 'general', label: 'Configurações Gerais' },

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { useStoreId } from '../../hooks/useStoreId'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import type { CatalogItem, CatalogCategory, ItemAvailabilityState } from '../../types'
 import './Cardapio.css'
 
@@ -177,7 +177,7 @@ function AliasPanel({ item, onClose }: { item: CatalogItemRow; onClose: () => vo
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Cardapio() {
-  const { storeId } = useStoreId()
+  const { storeId } = useAuth()
   const [tab, setTab]           = useState<Tab>('items')
   const [items, setItems]       = useState<CatalogItemRow[]>([])
   const [categories, setCategories] = useState<CatalogCategory[]>([])

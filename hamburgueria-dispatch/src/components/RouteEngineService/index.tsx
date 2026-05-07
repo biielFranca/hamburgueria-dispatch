@@ -6,40 +6,29 @@
  */
 
 import { useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
+import { useAuth } from '../auth/AuthBootstrap'
 import { startRouteEngine, runRouteEngine } from '../../lib/routeEngine'
 
-const POLL_INTERVAL_MS  = 15_000
-const BACKEND_ENABLED   = import.meta.env.VITE_BACKEND_ROUTE_ENGINE === 'true'
+// Realtime channel handles UPDATE events; this poll is a safety net.
+const POLL_INTERVAL_MS = 60_000
+const BACKEND_ENABLED  = import.meta.env.VITE_BACKEND_ROUTE_ENGINE === 'true'
 
 export default function RouteEngineService() {
+  const { storeId, isReady } = useAuth()
+
   useEffect(() => {
     if (BACKEND_ENABLED) return
+    if (!isReady || !storeId) return
 
-    let stop: (() => void) | null = null
-    let pollTimer: ReturnType<typeof setInterval> | null = null
-    let storeId: string | null = null
+    const stop = startRouteEngine(storeId)
+    runRouteEngine(storeId).catch(e => console.error('[RouteEngine] initial run error:', e))
 
-    async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
+    const pollTimer = setInterval(() => {
+      runRouteEngine(storeId).catch(e => console.error('[RouteEngine] poll run error:', e))
+    }, POLL_INTERVAL_MS)
 
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) return
-
-      storeId = userData.store_id
-      stop = startRouteEngine(storeId)
-      await runRouteEngine(storeId)
-
-      pollTimer = setInterval(async () => {
-        if (storeId) await runRouteEngine(storeId)
-      }, POLL_INTERVAL_MS)
-    }
-
-    init()
-    return () => { stop?.(); if (pollTimer) clearInterval(pollTimer) }
-  }, [])
+    return () => { stop?.(); clearInterval(pollTimer) }
+  }, [storeId, isReady])
 
   return null
 }

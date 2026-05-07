@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import type { Driver } from '../../types'
 import { formatLastSeen, isDriverOnline, toggleGpsEnabled } from '../../lib/driverGps'
 import './Drivers.css'
@@ -229,27 +230,16 @@ export default function Drivers() {
   const [reportError, setReportError] = useState('')
   const [reportGeneratedAt, setReportGeneratedAt] = useState<string | null>(null)
   const [openReportCalendar, setOpenReportCalendar] = useState<'start' | 'end' | null>(null)
-  const storeIdRef  = useRef<string | null>(null)
+  const { storeId, isReady } = useAuth()
   const inputRef    = useRef<HTMLInputElement>(null)
   const reportStartWrapRef = useRef<HTMLDivElement>(null)
   const reportEndWrapRef   = useRef<HTMLDivElement>(null)
 
-  // ── Resolve store_id ────────────────────────────────────────────────────────
   useEffect(() => {
-    async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-      const { data } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (data) {
-        storeIdRef.current = data.store_id
-        fetchDrivers(data.store_id)
-      } else {
-        setLoading(false)
-      }
-    }
-    init()
-  }, [])
+    if (!isReady) return
+    if (!storeId) { setLoading(false); return }
+    fetchDrivers()
+  }, [storeId, isReady]) // eslint-disable-line
 
   useEffect(() => {
     if (!openReportCalendar) return
@@ -277,14 +267,13 @@ export default function Drivers() {
   }, [openReportCalendar])
 
   // ── Fetch ───────────────────────────────────────────────────────────────────
-  async function fetchDrivers(storeId?: string) {
-    const sid = storeId ?? storeIdRef.current
-    if (!sid) return
+  async function fetchDrivers() {
+    if (!storeId) return
 
     const { data } = await supabase
       .from('drivers')
       .select('*')
-      .eq('store_id', sid)
+      .eq('store_id', storeId)
       .order('name')
 
     setDrivers((data ?? []) as Driver[])
@@ -294,11 +283,11 @@ export default function Drivers() {
   // ── Add ─────────────────────────────────────────────────────────────────────
   async function handleAdd() {
     const name = newName.trim()
-    if (!name || !storeIdRef.current) return
+    if (!name || !storeId) return
 
     setAdding(true)
     const { error } = await supabase.from('drivers').insert({
-      store_id:   storeIdRef.current,
+      store_id:   storeId,
       name,
       active:     true,
       created_at: new Date().toISOString(),
@@ -334,7 +323,7 @@ export default function Drivers() {
   }
 
   async function handleGenerateReport() {
-    const sid = storeIdRef.current
+    const sid = storeId
     if (!sid) return
 
     if (!reportStart || !reportEnd) {

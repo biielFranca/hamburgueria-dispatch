@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import { syncIfood } from '../../lib/ifood'
 import { playAlert } from '../../lib/alertSound'
 import { runRouteEngine } from '../../lib/routeEngine'
@@ -146,8 +147,7 @@ function LogMsg({ msg }: { msg: string }) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Dev() {
-  const storeIdRef = useRef<string | null>(null)
-  const [storeId, setStoreId] = useState<string | null>(null)
+  const { storeId, isReady } = useAuth()
 
   const [prepMin, setPrepMin] = useState(20)
 
@@ -173,7 +173,7 @@ export default function Dev() {
   }
 
   async function refreshStats(sid?: string) {
-    const id = sid ?? storeIdRef.current
+    const id = sid ?? storeId
     if (!id) return
     const [eligRes, suggRes] = await Promise.all([
       supabase.from('orders')
@@ -188,21 +188,11 @@ export default function Dev() {
   }
 
   useEffect(() => {
-    async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (userData) {
-        storeIdRef.current = userData.store_id
-        setStoreId(userData.store_id)
-        refreshCount(userData.store_id)
-        refreshSuggCount(userData.store_id)
-        refreshStats(userData.store_id)
-      }
-    }
-    init()
-  }, [])
+    if (!isReady || !storeId) return
+    refreshCount(storeId)
+    refreshSuggCount(storeId)
+    refreshStats(storeId)
+  }, [storeId, isReady]) // eslint-disable-line
 
   // ── Monitor: Supabase Realtime subscriptions ─────────────────────────────────
 
@@ -290,7 +280,7 @@ export default function Dev() {
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
   async function refreshCount(sid?: string) {
-    const id = sid ?? storeIdRef.current
+    const id = sid ?? storeId
     if (!id) return
     const { count } = await supabase
       .from('orders')
@@ -301,7 +291,7 @@ export default function Dev() {
   }
 
   async function refreshSuggCount(sid?: string) {
-    const id = sid ?? storeIdRef.current
+    const id = sid ?? storeId
     if (!id) return
     const { count } = await supabase
       .from('dispatch_suggestions')
@@ -312,13 +302,13 @@ export default function Dev() {
   }
 
   async function insertOrder(type: 'own' | 'platform' | 'pickup', set: (s: BtnStatus) => void) {
-    if (!storeIdRef.current) {
+    if (!storeId) {
       set({ state: 'error', msg: 'store_id não resolvido' })
       return
     }
     set({ state: 'loading', msg: '' })
     try {
-      const payload = mockOrder(storeIdRef.current, type, prepMin)
+      const payload = mockOrder(storeId, type, prepMin)
       const { error } = await supabase.from('orders').insert(payload)
       if (error) {
         set({ state: 'error', msg: error.message })
@@ -355,11 +345,11 @@ export default function Dev() {
   }
 
   async function handleForceEngine() {
-    if (!storeIdRef.current) return
+    if (!storeId) return
     setEngineRunning(true)
     addLog('info', '[route-engine] Execução manual iniciada...')
     try {
-      const result = await runRouteEngine(storeIdRef.current)
+      const result = await runRouteEngine(storeId)
       logEngineResult(result)
     } catch (e) {
       addLog('error', `[route-engine] Erro: ${e instanceof Error ? e.message : String(e)}`)
@@ -371,13 +361,13 @@ export default function Dev() {
   }
 
   async function handleTestIfood() {
-    if (!storeIdRef.current) {
+    if (!storeId) {
       setIfoodBtn({ state: 'error', msg: 'store_id não resolvido' })
       return
     }
     setIfoodBtn({ state: 'loading', msg: '' })
     try {
-      const result = await syncIfood(storeIdRef.current)
+      const result = await syncIfood(storeId)
       setIfoodBtn({
         state: 'ok',
         msg: `Sync executada - ${result.events} evento(s), ${result.inserted} inserido(s)`,
@@ -395,12 +385,12 @@ export default function Dev() {
   }
 
   async function handleClear() {
-    if (!storeIdRef.current) return
+    if (!storeId) return
     setClearBtn({ state: 'loading', msg: '' })
     const { error, count } = await supabase
       .from('orders')
       .delete({ count: 'exact' })
-      .eq('store_id', storeIdRef.current)
+      .eq('store_id', storeId)
       .ilike('platform_order_id', 'test-%')
 
     if (error) {
@@ -414,14 +404,14 @@ export default function Dev() {
   }
 
   async function handleClearSuggestions() {
-    if (!storeIdRef.current) return
+    if (!storeId) return
     setClearSuggBtn({ state: 'loading', msg: '' })
 
     // Fetch pending suggestions to know which orders to re-queue
     const { data: suggs, error: fetchErr } = await supabase
       .from('dispatch_suggestions')
       .select('id, suggested_sequence')
-      .eq('store_id', storeIdRef.current)
+      .eq('store_id', storeId)
       .eq('status', 'pending_review')
 
     if (fetchErr) {
@@ -445,7 +435,7 @@ export default function Dev() {
     const { error: delErr, count } = await supabase
       .from('dispatch_suggestions')
       .delete({ count: 'exact' })
-      .eq('store_id', storeIdRef.current)
+      .eq('store_id', storeId)
       .eq('status', 'pending_review')
 
     if (delErr) {

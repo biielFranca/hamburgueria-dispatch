@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import { syncIfood } from '../../lib/ifood'
 import { pollOpenDeliveryEvents } from '../../lib/integrations/openDelivery'
 import './Integrations.css'
@@ -241,30 +242,20 @@ function IntegrationCard({ def, integration, storeId, onSaved }: CardProps) {
 export default function Integrations() {
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loading, setLoading] = useState(true)
-  const storeIdRef = useRef<string | null>(null)
+  const { storeId, isReady } = useAuth()
 
   useEffect(() => {
-    async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-      const { data: userData } = await supabase.from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) {
-        setLoading(false)
-        return
-      }
-      storeIdRef.current = userData.store_id
-      await fetchIntegrations(userData.store_id)
-    }
-    init()
-  }, [])
+    if (!isReady) return
+    if (!storeId) { setLoading(false); return }
+    fetchIntegrations()
+  }, [storeId, isReady]) // eslint-disable-line
 
-  async function fetchIntegrations(storeId?: string) {
-    const sid = storeId ?? storeIdRef.current
-    if (!sid) return
+  async function fetchIntegrations() {
+    if (!storeId) return
     const { data } = await supabase
       .from('store_integrations')
       .select('id,store_id,platform,client_id,active,last_sync_at,last_error')
-      .eq('store_id', sid)
+      .eq('store_id', storeId)
       .limit(20)
     setIntegrations((data ?? []) as Integration[])
     setLoading(false)
@@ -289,7 +280,7 @@ export default function Integrations() {
               key={def.key}
               def={def}
               integration={integration}
-              storeId={storeIdRef.current ?? ''}
+              storeId={storeId ?? ''}
               onSaved={() => fetchIntegrations()}
             />
           )

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import { confirmIfoodDispatch } from '../../lib/integrations/ifood'
 import { confirmOpenDeliveryDispatch } from '../../lib/integrations/openDelivery'
 import { fetchRouteGeometry, findOptimalSequence } from '../../lib/routeEngine'
@@ -271,7 +272,7 @@ export default function Operational() {
   const [editingSuggId, setEditingSuggId] = useState<string | null>(null)
   const [loading, setLoading]             = useState(true)
   const [popupOrderId, setPopupOrderId]   = useState<string | null>(null)
-  const storeIdRef                        = useRef<string | null>(null)
+  const { storeId, isReady }              = useAuth()
   const driverFilterRef                   = useRef<HTMLDivElement | null>(null)
   // Monotonic generation counter — guards enrichment race: only the last
   // fetchAll() caller is allowed to commit state. Stale replies drop silently.
@@ -319,16 +320,8 @@ export default function Operational() {
   // ── Data fetching ───────────────────────────────────────────────────────────
 
   async function fetchAll() {
-    if (!storeIdRef.current) {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) { setLoading(false); return }
-      storeIdRef.current = userData.store_id
-    }
-
-    const sid = storeIdRef.current!
+    if (!storeId) { setLoading(false); return }
+    const sid = storeId
     const myGen = ++fetchGenRef.current
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -504,6 +497,7 @@ export default function Operational() {
   }
 
   useEffect(() => {
+    if (!isReady || !storeId) return
     fetchAll()
 
     // Coalesce realtime bursts: many postgres_changes events arriving in a
@@ -549,7 +543,7 @@ export default function Operational() {
       supabase.removeChannel(channel)
       clearInterval(pollTimer)
     }
-  }, []) // eslint-disable-line
+  }, [storeId, isReady]) // eslint-disable-line
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 

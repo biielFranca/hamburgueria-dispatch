@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../auth/AuthBootstrap'
 import { fetchAddressByCep } from '../../lib/cep'
 import type { DeliveryType, LogisticsType, OrderItem, Platform } from '../../types'
 import { PLATFORM_COLORS, PLATFORM_LABELS_SHORT } from '../../lib/platformConfig'
@@ -146,20 +147,8 @@ export default function OrderForm({ open, onClose, onCreated }: OrderFormProps) 
   const [error, setError]       = useState<string | null>(null)
   const [cepLoading, setCepLoading] = useState(false)
   const [cepError, setCepError]     = useState<string | null>(null)
-  const storeIdRef              = useRef<string | null>(null)
+  const { storeId }             = useAuth()
   const firstInputRef           = useRef<HTMLInputElement>(null)
-
-  // Resolve store_id once
-  useEffect(() => {
-    async function resolve() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-      const { data } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (data) storeIdRef.current = data.store_id
-    }
-    resolve()
-  }, [])
 
   useEffect(() => {
     if (open) {
@@ -240,12 +229,12 @@ export default function OrderForm({ open, onClose, onCreated }: OrderFormProps) 
     const err = validate()
     if (err) { setError(err); return }
 
-    if (!storeIdRef.current) { setError('Não foi possível identificar a loja.'); return }
+    if (!storeId) { setError('Não foi possível identificar a loja.'); return }
 
     setSubmitting(true)
     setError(null)
 
-    const payload = normalizeOrder(form, storeIdRef.current)
+    const payload = normalizeOrder(form, storeId)
     const { error: dbError } = await supabase.from('orders').insert(payload)
 
     setSubmitting(false)

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createEphemeralSupabaseClient, supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import type { Driver, User, UserPermissions } from '../../types'
 import './Users.css'
 
@@ -473,47 +474,20 @@ export default function UsersPage() {
   const [newOpen, setNewOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [editEntry, setEditEntry] = useState<Entry | null>(null)
-  const [isOwner, setIsOwner] = useState(false)
-  const storeIdRef = useRef<string | null>(null)
+  const { storeId, userRole, isReady } = useAuth()
+  const isOwner = userRole === 'owner' || userRole === 'admin'
 
   useEffect(() => {
-    async function init() {
-      try {
-        const { data: authData } = await supabase.auth.getUser()
-        if (!authData.user) {
-          setLoading(false)
-          return
-        }
+    if (!isReady) return
+    if (!storeId) { setLoading(false); return }
+    fetchAll().catch(e => {
+      console.error('Users init exception:', e)
+      setLoading(false)
+    })
+  }, [storeId, isReady]) // eslint-disable-line
 
-        const { data, error } = await supabase
-          .from('users')
-          .select('store_id, role')
-          .eq('auth_id', authData.user.id)
-          .single()
-
-        if (error) {
-          console.error('Users init error:', error)
-          setLoading(false)
-          return
-        }
-
-        if (data) {
-          storeIdRef.current = data.store_id
-          setIsOwner(data.role === 'owner' || data.role === 'admin')
-          await fetchAll(data.store_id)
-        } else {
-          setLoading(false)
-        }
-      } catch (e) {
-        console.error('Users init exception:', e)
-        setLoading(false)
-      }
-    }
-    init()
-  }, [])
-
-  async function fetchAll(storeId?: string) {
-    const sid = storeId ?? storeIdRef.current
+  async function fetchAll() {
+    const sid = storeId
     if (!sid) {
       setLoading(false)
       return
@@ -676,7 +650,7 @@ export default function UsersPage() {
         open={newOpen}
         onClose={() => setNewOpen(false)}
         onSaved={fetchAll}
-        storeId={storeIdRef.current ?? ''}
+        storeId={storeId ?? ''}
       />
       <SearchModal
         open={searchOpen}

@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../auth/AuthBootstrap'
 import { playAlert, isMuted, toggleMute } from '../../lib/alertSound'
 import { notify, requestNotificationPermission } from '../../lib/notify'
 import type { Order, Platform } from '../../types'
@@ -110,11 +111,11 @@ function MuteButton() {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function AlertSystem() {
+  const { storeId, isReady } = useAuth()
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   // Track last known alert_level per order to detect escalation
   const lastLevelRef = useRef<Map<string, AlertLevel>>(new Map())
   const firedRef     = useRef<Set<string>>(new Set())
-  const storeIdRef   = useRef<string | null>(null)
 
   function dismiss(uid: string) {
     setAlerts(prev => prev.map(a => a.uid === uid ? { ...a, dismissing: true } : a))
@@ -172,39 +173,24 @@ export default function AlertSystem() {
 
   useEffect(() => {
     requestNotificationPermission().catch(() => {})
+    if (!isReady || !storeId) return
 
-    async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
+    const channel = supabase
+      .channel(`alert-system-${storeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event:  'UPDATE',
+          schema: 'public',
+          table:  'orders',
+          filter: `store_id=eq.${storeId}`,
+        },
+        (payload) => handleOrderUpdate(payload.new as Order & { alert_level?: AlertLevel | null }),
+      )
+      .subscribe()
 
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) return
-
-      storeIdRef.current = userData.store_id
-
-      // Subscribe to order alert_level changes via Realtime
-      const channel = supabase
-        .channel(`alert-system-${userData.store_id}`)
-        .on(
-          'postgres_changes',
-          {
-            event:  'UPDATE',
-            schema: 'public',
-            table:  'orders',
-            filter: `store_id=eq.${userData.store_id}`,
-          },
-          (payload) => handleOrderUpdate(payload.new as Order & { alert_level?: AlertLevel | null }),
-        )
-        .subscribe()
-
-      return () => { supabase.removeChannel(channel) }
-    }
-
-    let cleanup: (() => void) | undefined
-    init().then(fn => { cleanup = fn })
-    return () => { cleanup?.() }
-  }, []) // eslint-disable-line
+    return () => { supabase.removeChannel(channel) }
+  }, [storeId, isReady]) // eslint-disable-line
 
   return (
     <>

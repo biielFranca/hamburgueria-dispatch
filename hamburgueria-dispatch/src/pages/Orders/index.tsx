@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/auth/AuthBootstrap'
 import type { Order, Platform } from '../../types'
 import { PLATFORMS } from '../../lib/platformConfig'
 import OrderForm from '../../components/OrderForm'
@@ -263,6 +264,7 @@ function OrderModal({ order, onClose }: { order: Order | null; onClose: () => vo
 const PAGE_SIZE = 100
 
 export default function Orders() {
+  const { storeId, isReady } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -271,37 +273,21 @@ export default function Orders() {
   const [formOpen, setFormOpen] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const storeIdRef = useRef<string | null>(null)
 
-  async function resolveStoreId(): Promise<string | null> {
-    if (storeIdRef.current) return storeIdRef.current
-    const { data: authData } = await supabase.auth.getUser()
-    if (!authData.user) return null
-    const { data: userData } = await supabase
-      .from('users')
-      .select('store_id')
-      .eq('auth_id', authData.user.id)
-      .single()
-    if (!userData?.store_id) return null
-    storeIdRef.current = userData.store_id
-    return userData.store_id
-  }
-
-  async function fetchOrders(storeId?: string) {
-    setRefreshing(true)
-    const sid = storeId ?? (await resolveStoreId())
-    if (!sid) {
+  async function fetchOrders() {
+    if (!storeId) {
       setOrders([])
       setError('Não foi possível identificar a loja')
       setLoading(false)
       setRefreshing(false)
       return
     }
+    setRefreshing(true)
 
     const { data, error } = await supabase
       .from('orders')
       .select('id,store_id,platform,platform_order_id,platform_order_code,customer_name,customer_phone,address_street,address_number,address_complement,address_neighborhood,address_city,address_zip,latitude,longitude,items,total_amount,payment_method,delivery_type,logistics_type,status,route_eligibility,route_block_reason,rejection_count,estimated_delivery_at,dispatched_at,created_at,updated_at')
-      .eq('store_id', sid)
+      .eq('store_id', storeId)
       .not('status', 'in', '("delivered","cancelled")')
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE + 1)
@@ -319,15 +305,13 @@ export default function Orders() {
   }
 
   async function loadMore() {
-    if (loadingMore || !hasMore || orders.length === 0) return
-    const sid = storeIdRef.current ?? (await resolveStoreId())
-    if (!sid) return
+    if (loadingMore || !hasMore || orders.length === 0 || !storeId) return
     setLoadingMore(true)
     const cursor = orders[orders.length - 1].created_at
     const { data, error } = await supabase
       .from('orders')
       .select('id,store_id,platform,platform_order_id,platform_order_code,customer_name,customer_phone,address_street,address_number,address_complement,address_neighborhood,address_city,address_zip,latitude,longitude,items,total_amount,payment_method,delivery_type,logistics_type,status,route_eligibility,route_block_reason,rejection_count,estimated_delivery_at,dispatched_at,created_at,updated_at')
-      .eq('store_id', sid)
+      .eq('store_id', storeId)
       .not('status', 'in', '("delivered","cancelled")')
       .lt('created_at', cursor)
       .order('created_at', { ascending: false })
@@ -341,37 +325,28 @@ export default function Orders() {
   }
 
   useEffect(() => {
+    if (!isReady || !storeId) return
     let channel: ReturnType<typeof supabase.channel> | null = null
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-    async function init() {
-      const sid = await resolveStoreId()
-      if (!sid) {
-        setLoading(false)
-        return
-      }
+    fetchOrders()
 
-      await fetchOrders(sid)
-
-      // Real-time subscription scoped by store. Debounce bursts of changes
-      // (a single dispatch flips N orders + 1 suggestion) into one refetch
-      // so the list — and any open modal — doesn't flicker mid-transaction.
-      channel = supabase
-        .channel(`orders-changes-${sid}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `store_id=eq.${sid}` }, () => {
-          if (debounceTimer) clearTimeout(debounceTimer)
-          debounceTimer = setTimeout(() => { fetchOrders(sid) }, 250)
-        })
-        .subscribe()
-    }
-
-    init()
+    // Real-time subscription scoped by store. Debounce bursts of changes
+    // (a single dispatch flips N orders + 1 suggestion) into one refetch
+    // so the list — and any open modal — doesn't flicker mid-transaction.
+    channel = supabase
+      .channel(`orders-changes-${storeId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `store_id=eq.${storeId}` }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => { fetchOrders() }, 250)
+      })
+      .subscribe()
 
     return () => {
       if (channel) supabase.removeChannel(channel)
       if (debounceTimer) clearTimeout(debounceTimer)
     }
-  }, [])
+  }, [storeId, isReady]) // eslint-disable-line
 
   // Keep the open modal in sync with the latest orders snapshot. Without this
   // the modal keeps displaying a stale Order object after a realtime refetch —

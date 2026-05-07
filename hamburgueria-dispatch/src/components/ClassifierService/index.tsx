@@ -9,39 +9,31 @@
  */
 
 import { useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
+import { useAuth } from '../auth/AuthBootstrap'
 import { startClassifier, classifyPendingOrders } from '../../lib/classifier'
 
-const CLASSIFIER_POLL_MS   = 5_000
-const BACKEND_ENABLED      = import.meta.env.VITE_BACKEND_CLASSIFIER === 'true'
+// Realtime channel handles INSERT events; this poll is a safety net for the
+// rare case Realtime drops without notification. 60s is enough — the engine
+// is event-driven, not poll-driven.
+const CLASSIFIER_POLL_MS = 60_000
+const BACKEND_ENABLED    = import.meta.env.VITE_BACKEND_CLASSIFIER === 'true'
 
 export default function ClassifierService() {
+  const { storeId, isReady } = useAuth()
+
   useEffect(() => {
     if (BACKEND_ENABLED) return
+    if (!isReady || !storeId) return
 
-    let stop: (() => void) | null = null
-    let pollTimer: ReturnType<typeof setInterval> | null = null
+    const stop = startClassifier(storeId)
+    classifyPendingOrders(storeId).catch(console.error)
 
-    async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
+    const pollTimer = setInterval(() => {
+      classifyPendingOrders(storeId).catch(console.error)
+    }, CLASSIFIER_POLL_MS)
 
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) return
-
-      const storeId = userData.store_id
-      stop = startClassifier(storeId)
-      await classifyPendingOrders(storeId)
-
-      pollTimer = setInterval(() => {
-        classifyPendingOrders(storeId).catch(console.error)
-      }, CLASSIFIER_POLL_MS)
-    }
-
-    init()
-    return () => { stop?.(); if (pollTimer) clearInterval(pollTimer) }
-  }, [])
+    return () => { stop?.(); clearInterval(pollTimer) }
+  }, [storeId, isReady])
 
   return null
 }

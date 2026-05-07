@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../auth/AuthBootstrap'
 import { pollOpenDeliveryEvents } from '../../lib/integrations/openDelivery'
 
 const POLL_INTERVAL_MS = 30_000
@@ -16,26 +17,18 @@ interface PlatformStatus {
 }
 
 export default function OpenDeliveryPoller() {
-  const storeIdRef    = useRef<string | null>(null)
+  const { storeId, isReady } = useAuth()
   const merchantIds   = useRef<Partial<Record<OdPlatform, string>>>({})
   const activeRef     = useRef<Partial<Record<OdPlatform, boolean>>>({})
   const [statuses, setStatuses] = useState<Partial<Record<OdPlatform, PlatformStatus>>>({})
 
   useEffect(() => {
+    if (!isReady || !storeId) return
     async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) return
-
-      storeIdRef.current = userData.store_id
-
       const { data: integrations } = await supabase
         .from('store_integrations')
         .select('platform,client_id,active')
-        .eq('store_id', userData.store_id)
+        .eq('store_id', storeId)
         .in('platform', [...OD_PLATFORMS])
 
       for (const int of integrations ?? []) {
@@ -47,11 +40,11 @@ export default function OpenDeliveryPoller() {
       }
     }
     init()
-  }, [])
+  }, [storeId, isReady])
 
   useEffect(() => {
+    if (!isReady || !storeId) return
     async function poll() {
-      const storeId = storeIdRef.current
       if (!storeId) return
 
       for (const platform of OD_PLATFORMS) {
@@ -84,7 +77,7 @@ export default function OpenDeliveryPoller() {
     const timeout  = setTimeout(poll, 3_000)
     const interval = setInterval(poll, POLL_INTERVAL_MS)
     return () => { clearTimeout(timeout); clearInterval(interval) }
-  }, [])
+  }, [storeId, isReady])
 
   const visiblePlatforms = OD_PLATFORMS.filter(p => activeRef.current[p] || statuses[p])
   if (visiblePlatforms.length === 0) return null

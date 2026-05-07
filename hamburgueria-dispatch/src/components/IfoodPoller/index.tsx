@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../auth/AuthBootstrap'
 import { syncIfood } from '../../lib/ifood'
 
 const POLL_INTERVAL_MS = 30_000
@@ -14,33 +15,24 @@ interface PollStatus {
 export type { PollStatus }
 
 export default function IfoodPoller() {
-  const [storeId, setStoreId] = useState<string | null>(null)
-  const [active, setActive]   = useState(false)
-  const activeRef             = useRef(false)
-  const [status, setStatus]   = useState<PollStatus>({ lastSync: null, lastError: null, syncing: false })
+  const { storeId, isReady } = useAuth()
+  const [active, setActive]  = useState(false)
+  const activeRef            = useRef(false)
+  const [status, setStatus]  = useState<PollStatus>({ lastSync: null, lastError: null, syncing: false })
 
   // keep ref in sync so the polling interval reads fresh value without restart
   useEffect(() => { activeRef.current = active }, [active])
 
-  // Resolve store_id + check if integration is active + subscribe to changes
+  // Check if integration is active + subscribe to changes
   useEffect(() => {
+    if (!isReady || !storeId) return
     let channel: ReturnType<typeof supabase.channel> | null = null
 
     async function init() {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) return
-
-      const { data: userData } = await supabase
-        .from('users').select('store_id').eq('auth_id', authData.user.id).single()
-      if (!userData) return
-
-      setStoreId(userData.store_id)
-
-      // Check current state
       const { data: integration } = await supabase
         .from('store_integrations')
         .select('active')
-        .eq('store_id', userData.store_id)
+        .eq('store_id', storeId)
         .eq('platform', 'ifood')
         .maybeSingle()
 
@@ -48,14 +40,14 @@ export default function IfoodPoller() {
 
       // Realtime: react to active toggle from Integrations page without reload
       channel = supabase
-        .channel(`ifood-poller-${userData.store_id}`)
+        .channel(`ifood-poller-${storeId}`)
         .on(
           'postgres_changes',
           {
             event: '*',
             schema: 'public',
             table: 'store_integrations',
-            filter: `store_id=eq.${userData.store_id}`,
+            filter: `store_id=eq.${storeId}`,
           },
           (payload) => {
             const row = (payload.new ?? payload.old) as { platform?: string; active?: boolean }
@@ -74,7 +66,7 @@ export default function IfoodPoller() {
     return () => {
       if (channel) supabase.removeChannel(channel)
     }
-  }, [])
+  }, [storeId, isReady])
 
   // Polling loop — driven by storeId + active
   useEffect(() => {
