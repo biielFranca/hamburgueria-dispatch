@@ -11,6 +11,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveStoreScope } from '../_shared/requireStore.ts'
 
 const SUPABASE_URL    = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -337,17 +338,21 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  let storeId: string | null = null
+  let bodyStoreId: string | undefined
   try {
     const body = await req.json()
-    storeId = body?.record?.store_id ?? body?.store_id ?? null
+    bodyStoreId = body?.record?.store_id ?? body?.store_id ?? undefined
   } catch {
     return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON' }), { status: 400 })
   }
 
-  if (!storeId) {
-    return new Response(JSON.stringify({ ok: false, error: 'store_id required' }), { status: 400 })
+  // Security: storeId is JWT-derived for user calls; service-role
+  // (DB webhook, classify-orders -> run-route-engine chain) trusts body.
+  const auth = await resolveStoreScope(req, bodyStoreId)
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ ok: false, error: auth.error }), { status: auth.status })
   }
+  const storeId = auth.storeId
 
   try {
     const result = await runEngine(storeId)

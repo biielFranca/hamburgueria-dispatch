@@ -14,6 +14,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveStoreScope } from '../_shared/requireStore.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -166,23 +167,27 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  let storeId: string | null = null
+  let bodyStoreId: string | undefined
 
   try {
     const body = await req.json()
     // DB webhook payload shape: { type, table, record, ... }
     if (body?.record?.store_id) {
-      storeId = body.record.store_id
+      bodyStoreId = body.record.store_id
     } else if (typeof body?.store_id === 'string') {
-      storeId = body.store_id
+      bodyStoreId = body.store_id
     }
   } catch {
     return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON' }), { status: 400 })
   }
 
-  if (!storeId) {
-    return new Response(JSON.stringify({ ok: false, error: 'store_id required' }), { status: 400 })
+  // Security: derive storeId from JWT for user calls; trust body for
+  // service-role callers (DB webhook, internal cross-function invocation).
+  const auth = await resolveStoreScope(req, bodyStoreId)
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ ok: false, error: auth.error }), { status: auth.status })
   }
+  const storeId = auth.storeId
 
   const supabase = adminClient()
 
