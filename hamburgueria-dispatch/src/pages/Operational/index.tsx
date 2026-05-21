@@ -635,7 +635,7 @@ export default function Operational() {
         confirmIfoodDispatch(order.platform_order_id).catch(e =>
           console.warn('[Dispatch] iFood confirm failed:', e),
         )
-      } else if (order.platform === '99food' || order.platform === 'cardapio_web') {
+      } else if (order.platform === '99food') {
         confirmOpenDeliveryDispatch(order.platform, order.platform_order_id).catch(e =>
           console.warn(`[Dispatch] ${order.platform} confirm failed:`, e),
         )

@@ -50,14 +50,6 @@ const PLATFORM_DEFS: PlatformDef[] = [
     fields: { clientId: 'Merchant ID', clientSecret: 'Client Secret' },
     docsUrl: 'https://99app.com',
   },
-  {
-    key: 'cardapio_web',
-    label: 'Cardápio Web',
-    color: '#8B5CF6',
-    description: 'Recebe pedidos do Cardápio Web via Open Delivery.',
-    fields: { clientId: 'Merchant ID', clientSecret: 'Client Secret' },
-    docsUrl: 'https://cardapio.com.br',
-  },
 ]
 
 interface CardProps {
@@ -130,7 +122,7 @@ function IntegrationCard({ def, integration, storeId, onSaved }: CardProps) {
         const result = await syncIfood(storeId)
         setTestResult(`✓ Sync ok — ${result.events} evento(s), ${result.inserted} inserido(s)`)
       } else {
-        await pollOpenDeliveryEvents(def.key as '99food' | 'keeta' | 'cardapio_web', storeId, clientId.trim())
+        await pollOpenDeliveryEvents(def.key as '99food' | 'keeta', storeId, clientId.trim())
         setTestResult(`✓ Conexão ok — ${def.label} respondeu com sucesso`)
       }
     } catch (e) {

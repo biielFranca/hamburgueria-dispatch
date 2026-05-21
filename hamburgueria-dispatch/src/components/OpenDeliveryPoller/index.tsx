@@ -7,7 +7,7 @@ const POLL_INTERVAL_MS = 30_000
 
 import { PLATFORM_COLORS, PLATFORM_LABELS } from '../../lib/platformConfig'
 
-const OD_PLATFORMS = ['keeta', '99food', 'cardapio_web'] as const
+const OD_PLATFORMS = ['keeta', '99food'] as const
 type OdPlatform = typeof OD_PLATFORMS[number]
 
 interface PlatformStatus {

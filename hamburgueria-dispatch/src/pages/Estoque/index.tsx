@@ -5,6 +5,7 @@ import type { InventoryItem, StockMovement, CatalogItem } from '../../types'
 import './Estoque.css'
 
 type Tab = 'stock' | 'movements' | 'recipes'
+type CatalogOption = Pick<CatalogItem, 'id' | 'name'>
 
 const UNITS = ['un', 'kg', 'g', 'L', 'ml', 'cx', 'pct', 'dz']
 
@@ -167,7 +168,7 @@ export default function Estoque() {
   const [tab, setTab]               = useState<Tab>('stock')
   const [items, setItems]           = useState<InventoryItem[]>([])
   const [movements, setMovements]   = useState<(StockMovement & { item_name?: string })[]>([])
-  const [catalogs, setCatalogs]     = useState<CatalogItem[]>([])
+  const [catalogs, setCatalogs]     = useState<CatalogOption[]>([])
   const [recipes, setRecipes]       = useState<any[]>([])
   const [loading, setLoading]       = useState(true)
   const [modalOpen, setModalOpen]   = useState(false)
@@ -344,7 +345,7 @@ export default function Estoque() {
 
 function RecipesTab({ storeId, items, catalogs, recipes, onReload }: {
   storeId: string | null; items: InventoryItem[]
-  catalogs: CatalogItem[]; recipes: any[]; onReload: () => void
+  catalogs: CatalogOption[]; recipes: any[]; onReload: () => void
 }) {
   const [form, setForm]     = useState({ catalog_item_id: '', inventory_item_id: '', quantity_used: '' })
   const [saving, setSaving] = useState(false)

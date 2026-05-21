@@ -1,5 +1,7 @@
 # Cardápio Web — API Aberta
 
+> Deprecated historical note. Cardápio Web support was removed from the current app; this file is kept only as archived implementation history.
+
 ## Summary
 Cardápio Web expõe **duas APIs independentes**:
 

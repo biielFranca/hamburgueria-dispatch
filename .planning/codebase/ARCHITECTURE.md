@@ -126,7 +126,7 @@
 
 **Order Status & Platform Enums:**
 - Purpose: Type-safe platform/status/role constants shared across app
-- Examples: `Order`, `Platform = 'ifood' | '99food' | 'cardapio_web' | 'keeta'`, `UserRole = 'owner' | 'admin' | 'operator'`
+- Examples: `Order`, `Platform = 'ifood' | '99food' | 'keeta'`, `UserRole = 'owner' | 'admin' | 'operator'`
 - Pattern: Centralized in `types/index.ts`, used in platform color maps and form selects
 
 **Page Component with Router-like Pattern:**

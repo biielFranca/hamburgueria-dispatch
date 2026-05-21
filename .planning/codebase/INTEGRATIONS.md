@@ -16,7 +16,6 @@
 **Planned/Future Platforms:**
 - Keeta (In development - disabled UI)
 - 99Food (In development - disabled UI)
-- Cardápio Web (In development - disabled UI)
 
 ## Data Storage
 

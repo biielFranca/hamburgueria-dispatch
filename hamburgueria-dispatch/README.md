@@ -1,6 +1,6 @@
 # Hamburgueria Dispatch
 
-Desktop operations hub for hamburger restaurants. Manages order intake from multiple delivery platforms (iFood, Keeta, 99Food, Cardápio Web), dispatches delivery drivers, and provides real-time operational visibility.
+Desktop operations hub for hamburger restaurants. Manages order intake from multiple delivery platforms (iFood, Keeta, 99Food), dispatches delivery drivers, and provides real-time operational visibility.
 
 ## Overview
 

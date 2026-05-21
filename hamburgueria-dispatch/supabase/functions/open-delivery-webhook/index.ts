@@ -22,8 +22,7 @@ Deno.serve(async (req: Request) => {
     raw = ''
   }
 
-  // DEBUG: sempre logar payload bruto recebido para diagnóstico do webhook
-  // (remover após validar fluxo real Cardápio Web → Dispatch)
+  // DEBUG: sempre logar payload bruto recebido para diagnóstico do webhook.
   console.log('[webhook] url=%s rawLen=%d raw=%s', req.url, raw.length, raw.slice(0, 4000))
 
   let parsed: Record<string, any> = {}
@@ -41,12 +40,11 @@ Deno.serve(async (req: Request) => {
     ''
   )
 
-  // Cardápio Web envia payload Open Delivery direto (sem wrapper platform/storeId).
-  // Nesse caso, `parsed.payload` não existe → usa `parsed` inteiro como payload.
+  // Quando o payload vem sem wrapper, `parsed.payload` não existe; usa `parsed`.
   const payload = parsed.payload ?? parsed
 
   if (!platform) {
-    return jsonReply({ ok: false, error: 'platform inválida. Use query ?platform=cardapio_web ou body.platform' })
+    return jsonReply({ ok: false, error: 'platform inválida. Use query/body platform=99food ou keeta' })
   }
   if (!storeId) {
     return jsonReply({ ok: false, error: 'storeId é obrigatório (query ?storeId=... ou body.storeId)' })

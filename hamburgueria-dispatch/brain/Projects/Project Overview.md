@@ -1,7 +1,7 @@
 # Visão Geral do Projeto
 
 ## Resumo
-Hamburgueria Dispatch é um aplicativo desktop Windows para gerenciamento de despacho de delivery. Recebe pedidos de plataformas (iFood, 99Food, Keeta, Cardápio Web), classifica-os logisticamente, agrupa em rotas ótimas e despacha motoboys.
+Hamburgueria Dispatch é um aplicativo desktop Windows para gerenciamento de despacho de delivery. Recebe pedidos de plataformas (iFood, 99Food, Keeta), classifica-os logisticamente, agrupa em rotas ótimas e despacha motoboys.
 
 ## Fonte
 - `hamburgueria-dispatch/` — código principal
@@ -37,7 +37,7 @@ Eliminar o despacho manual em hamburguerias e restaurantes com delivery próprio
 - **Motor de Rotas** (`src/lib/routeEngine.ts` + `src/components/RouteEngineService/`) — gera sugestões de despacho
 - **Sistema de Alertas** (`src/components/AlertSystem/`) — alertas por tempo com áudio
 - **Integração iFood** (`src/lib/integrations/ifood.ts` + `src/components/IfoodPoller/`) — sincronização de pedidos
-- **Open Delivery** (`src/lib/integrations/openDelivery.ts`) — 99Food, Keeta, Cardápio Web (parcial)
+- **Open Delivery** (`src/lib/integrations/openDelivery.ts`) — 99Food, Keeta (parcial)
 - **Operacional** (`src/pages/Operational/`) — painel principal com mapa
 - **Pedidos** (`src/pages/Orders/`) — lista de pedidos com atualizações em tempo real
 - **Configurações** (`src/pages/Settings/`) — 3 abas: Configurações Gerais, Conexões, Meu Plano
@@ -52,7 +52,7 @@ Eliminar o despacho manual em hamburguerias e restaurantes com delivery próprio
 v1 entregue e funcional. Sem testes automatizados. Problemas de segurança conhecidos (service key no frontend, credenciais em texto plano). Melhorias de performance planejadas.
 
 ## Áreas Incompletas Conhecidas
-- Integrações Open Delivery (99Food, Keeta, Cardápio Web) — UI oculta, lib existe
+- Integrações Open Delivery (99Food, Keeta) — lib existe
 - Suporte offline — não iniciado
 - Suite de testes automatizados — não iniciada
 - Rastreamento de motoboy — não iniciado

@@ -53,13 +53,6 @@ const PLATFORM_DEFS = [
     description: 'Recebe pedidos via Open Delivery com suporte a logística própria.',
     disabled: false,
   },
-  {
-    key: 'cardapio_web',
-    label: 'Cardápio Web',
-    color: '#8B5CF6',
-    description: 'Recebe pedidos do Cardápio Web via Open Delivery.',
-    disabled: false,
-  },
 ]
 
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024
@@ -150,7 +143,7 @@ function IntegrationCard({
         const result = await syncIfood(storeId)
         setTestResult(`✓ Sync ok — ${result.events} evento(s), ${result.inserted} inserido(s)`)
       } else {
-        await pollOpenDeliveryEvents(def.key as '99food' | 'keeta' | 'cardapio_web', storeId, clientId.trim())
+        await pollOpenDeliveryEvents(def.key as '99food' | 'keeta', storeId, clientId.trim())
         setTestResult(`✓ Conexão ok — ${def.label} respondeu com sucesso`)
       }
     } catch (e) {
@@ -607,7 +600,7 @@ function TabPlan() {
       'Painel operacional em tempo real',
       'Motor de rotas com agrupamento automático',
       'Integração iFood (Merchant API)',
-      'Integração 99Food, Keeta e Cardápio Web (em breve)',
+      'Integração 99Food e Keeta (em breve)',
       'Alertas de atraso com sons configuráveis',
       'Gestão de motoboys',
       'Múltiplos operadores',

@@ -52,12 +52,12 @@
 - [ ] Implementar função de despacho: quando uma sugestão com pedido iFood for aceita no painel, chamar o endpoint de confirmação de despacho da plataforma com o ID do pedido
 - [ ] Adicionar tratamento de erro com retry: em caso de falha HTTP 5xx ou timeout, tentar novamente até 3 vezes com intervalo exponencial antes de registrar o erro
 
-## Bloco 6 — Integração Open Delivery (99Food, Keeta, Cardápio Web)
+## Bloco 6 — Integração Open Delivery (99Food, Keeta)
 
-- [ ] Adicionar variáveis no `.env`: `VITE_99FOOD_CLIENT_ID`, `VITE_99FOOD_CLIENT_SECRET`, `VITE_KEETA_CLIENT_ID`, `VITE_KEETA_CLIENT_SECRET`, `VITE_CARDAPIOWEB_CLIENT_ID`, `VITE_CARDAPIOWEB_CLIENT_SECRET`, `VITE_CARDAPIOWEB_WEBHOOK_SECRET`
+- [ ] Adicionar variáveis no `.env`: `VITE_99FOOD_CLIENT_ID`, `VITE_99FOOD_CLIENT_SECRET`, `VITE_KEETA_CLIENT_ID`, `VITE_KEETA_CLIENT_SECRET`
 - [ ] Criar `src/lib/integrations/openDelivery.ts` com função de autenticação OAuth 2.0 do padrão Open Delivery: instanciar um cliente autenticado por plataforma, com cache e renovação automática de token
 - [ ] Criar handler de webhook em `src/api/webhook/openDelivery.ts`: receber HTTP POST, identificar a plataforma de origem pelo header ou endpoint, e validar a assinatura com o secret correspondente
-- [ ] Implementar normalização de payload Open Delivery: converter o formato padrão para o formato interno da tabela `orders`, mapeando `platform` para `'99food'`, `'keeta'` ou `'cardapio_web'` conforme a origem
+- [ ] Implementar normalização de payload Open Delivery: converter o formato padrão para o formato interno da tabela `orders`, mapeando `platform` para `'99food'` ou `'keeta'` conforme a origem
 - [ ] Forçar para pedidos da Keeta: `logistics_type = 'platform'` e `route_eligibility = 'external_monitoring'` — a Keeta usa motoboy próprio e nunca deve entrar na fila de roteirização
 - [ ] Implementar função de despacho Open Delivery: quando uma sugestão com pedido de plataforma Open Delivery for aceita, chamar o endpoint de atualização de status do padrão para confirmar o despacho
 - [ ] Adicionar tratamento de erro com retry para chamadas Open Delivery, seguindo o mesmo padrão da integração iFood

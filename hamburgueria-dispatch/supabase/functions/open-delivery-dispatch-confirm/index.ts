@@ -18,7 +18,7 @@ Deno.serve(async (req: Request) => {
   const bodyStoreId = typeof body.storeId === 'string' ? body.storeId.trim() : undefined
 
   if (!platform) {
-    return jsonReply({ ok: false, error: 'platform inválida. Use: 99food, keeta ou cardapio_web' })
+    return jsonReply({ ok: false, error: 'platform inválida. Use: 99food ou keeta' })
   }
 
   if (!platformOrderId) {

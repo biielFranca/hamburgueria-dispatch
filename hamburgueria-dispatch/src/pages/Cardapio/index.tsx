@@ -432,7 +432,7 @@ function MappingsTab({ storeId, items }: { storeId: string | null; items: Catalo
           {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
         </select>
         <select value={form.platform} onChange={e => setForm(f => ({ ...f, platform: e.target.value }))} style={{ width: 110 }}>
-          {['ifood', '99food', 'keeta', 'cardapio_web'].map(p => <option key={p} value={p}>{p}</option>)}
+          {['ifood', '99food', 'keeta'].map(p => <option key={p} value={p}>{p}</option>)}
         </select>
         <input value={form.external_code} onChange={e => setForm(f => ({ ...f, external_code: e.target.value }))} placeholder="Código externo" style={{ flex: 1, minWidth: 120 }} />
         <input value={form.external_name} onChange={e => setForm(f => ({ ...f, external_name: e.target.value }))} placeholder="Nome na plataforma (opcional)" style={{ flex: 1, minWidth: 150 }} />

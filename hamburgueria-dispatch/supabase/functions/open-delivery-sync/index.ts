@@ -20,7 +20,7 @@ Deno.serve(async (req: Request) => {
   if (!platform) {
     return jsonReply({
       ok: false,
-      error: 'platform inválida. Use: 99food, keeta ou cardapio_web',
+      error: 'platform inválida. Use: 99food ou keeta',
       inserted: 0,
       events: 0,
       errors: [],

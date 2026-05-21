@@ -28,7 +28,7 @@ Ponto de entrada da base de conhecimento do Hamburgueria Dispatch. Este vault do
 ## Em Revisão Ativa
 - Segurança: service key exposta no frontend, credenciais em texto plano no banco
 - Testes: zero testes automatizados em todo o código
-- Integrações Open Delivery: Keeta, 99Food, Cardápio Web (em desenvolvimento)
+- Integrações Open Delivery: Keeta, 99Food (em desenvolvimento)
 
 ## Status do Projeto
 64/64 tarefas da `tasks_v1.md` concluídas. v1 entregue. Planejando v2.

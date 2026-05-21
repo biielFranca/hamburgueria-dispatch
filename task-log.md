@@ -101,9 +101,9 @@ Criado `src/lib/integrations/ifood.ts`:
 **Status:** Concluídas
 
 Criado `src/lib/integrations/openDelivery.ts`:
-- Token cache por plataforma (99Food, Keeta, Cardápio Web)
+- Token cache por plataforma (99Food, Keeta)
 - Keeta: `alwaysPlatformLogistics = true` → `route_eligibility = external_monitoring` imediato
-- Webhook handler com validação HMAC-SHA256 (Cardápio Web)
+- Webhook handler com validação HMAC-SHA256
 - Normalização de payload para formato interno
 - `confirmOpenDeliveryDispatch()` para atualizar status na plataforma
 - Retry exponencial para erros 5xx/timeout

@@ -10,12 +10,11 @@ import './Dev.css'
 
 const NAMES = ['João Silva', 'Maria Souza', 'Carlos Oliveira', 'Ana Costa', 'Pedro Santos', 'Lucia Ferreira', 'Fernanda Lima', 'Rafael Mendes']
 const PAYMENTS = ['pix', 'credit_card', 'debit_card', 'cash']
-const TEST_PLATFORMS = ['ifood', '99food', 'cardapio_web', 'keeta'] as const
+const TEST_PLATFORMS = ['ifood', '99food', 'keeta'] as const
 
 function platformLabel(platform: (typeof TEST_PLATFORMS)[number]) {
   if (platform === 'ifood') return 'iFood'
   if (platform === '99food') return '99Food'
-  if (platform === 'cardapio_web') return 'Cardápio Web'
   return 'Keeta'
 }
 

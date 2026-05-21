@@ -1,4 +1,4 @@
-export type Platform = 'ifood' | '99food' | 'cardapio_web' | 'keeta' | 'aiqfome'
+export type Platform = 'ifood' | '99food' | 'keeta'
 
 export type UserRole = 'owner' | 'admin' | 'operator'
 
@@ -86,10 +86,8 @@ export interface Order {
   store_id: string
   platform: Platform
   /**
-   * Canal de origem real do pedido quando vem via agregador.
-   * Ex.: Cardápio Web consolida iFood/99Food/Keeta/site próprio — este campo
-   * traz o `salesChannel` do payload Open Delivery (IFOOD, 99FOOD, KEETA,
-   * DELIVERYHUB, PARTNER, OWN_SITE, etc). Null para pedidos diretos.
+   * Canal de origem real do pedido quando vem via agregador/Open Delivery.
+   * Traz o `salesChannel` do payload quando disponível. Null para pedidos diretos.
    */
   source_channel?: string | null
   platform_order_id: string

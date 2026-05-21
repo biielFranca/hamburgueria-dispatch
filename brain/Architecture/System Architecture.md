@@ -25,7 +25,7 @@ hamburgueria-dispatch/
 │  │  ├─ geocoder.ts       # Geocodificação de endereços
 │  │  └─ integrations/
 │  │     ├─ ifood.ts       # Chamadas à API do iFood
-│  │     └─ openDelivery.ts # Open Delivery (99Food, Keeta, Cardápio Web)
+│  │     └─ openDelivery.ts # Open Delivery (99Food, Keeta)
 │  ├─ components/
 │  │  ├─ AlertSystem/      # Polling em background + toasts de alerta
 │  │  ├─ ClassifierService/ # Assinatura Realtime em background
@@ -93,7 +93,7 @@ hamburgueria-dispatch/
 - **Supabase Auth** — email/senha com esquema sintético `username@dispatch.internal`
 - **Supabase Edge Functions** — `ifood-sync` para processamento de pedidos iFood
 - **iFood Merchant API** — eventos de pedido, OAuth2 com client credentials
-- **Protocolo Open Delivery** — 99Food, Keeta, Cardápio Web (parcial)
+- **Protocolo Open Delivery** — 99Food, Keeta (parcial)
 - **API ViaCEP** — consulta de endereço por CEP
 - **API de rotas externa** (Mapbox ou Google Maps) — configurada via env vars, usada pelo Motor de Rotas
 - **Leaflet / react-leaflet** — exibição de mapa no Painel Operacional e Configurações

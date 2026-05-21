@@ -365,8 +365,7 @@ export default function Orders() {
     if (fresh && fresh !== selectedOrder) setSelectedOrder(fresh)
   }, [orders, selectedOrder])
 
-  // Group by effective platform (source_channel-aware) so a 99Food order
-  // that flowed via Cardápio Web lands in the 99Food column, not CW.
+  // Group by effective platform, preferring source_channel when present.
   const ordersByPlatform = (platform: Platform) =>
     orders.filter(o => effectivePlatform(o) === platform)
 

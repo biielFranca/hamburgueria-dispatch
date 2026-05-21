@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-export type OdPlatform = '99food' | 'keeta' | 'cardapio_web'
+export type OdPlatform = '99food' | 'keeta'
 
 export const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -93,7 +93,7 @@ export async function readJsonBody(req: Request): Promise<Record<string, any>> {
 export function normalizePlatform(value: unknown): OdPlatform | null {
   if (typeof value !== 'string') return null
   const cleaned = value.trim().toLowerCase()
-  if (cleaned === '99food' || cleaned === 'keeta' || cleaned === 'cardapio_web') {
+  if (cleaned === '99food' || cleaned === 'keeta') {
     return cleaned
   }
   return null
@@ -420,8 +420,7 @@ function normalizeOrder(
   const orderId = parseString(order.id, order.orderId, order.referenceCode) ?? ''
   if (!orderId) throw new Error('order payload sem identificador')
 
-  // salesChannel (Open Delivery) indica origem real quando vem via agregador
-  // (ex.: Cardápio Web consolidando iFood/99Food/Keeta/site próprio)
+  // salesChannel (Open Delivery) indica origem real quando vem via agregador.
   const sourceChannel = parseString(
     (order as any).salesChannel,
     (order as any).sales_channel,

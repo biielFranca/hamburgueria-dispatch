@@ -50,7 +50,7 @@ Bugs conhecidos, problemas de segurança, gargalos de performance, funcionalidad
 
 ## 🟢 Baixa Prioridade — Funcionalidades Faltantes
 
-- [ ] **Ativar integrações Open Delivery** — 99Food, Keeta, Cardápio Web. Biblioteca existe (`openDelivery.ts`). Exibir UI em Configurações → Conexões.
+- [ ] **Ativar integrações Open Delivery** — 99Food e Keeta. Biblioteca existe (`openDelivery.ts`). Exibir UI em Configurações → Conexões.
 - [ ] **Suporte offline** — app falha completamente sem conexão com Supabase. Adicionar cache local SQLite + fila de sincronização.
 - [ ] **Histórico de pedidos / trilha de auditoria** — sem registro de transições de status ou motivos de recusa. Adicionar tabela `order_events`.
 - [ ] **Rastreamento GPS do motoboy** — sem localização do motoboy em tempo real no mapa. Exigiria app mobile companion ou API de geolocalização.

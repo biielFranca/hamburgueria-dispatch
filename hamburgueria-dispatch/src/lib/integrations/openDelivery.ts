@@ -5,7 +5,7 @@
 
 import { supabase } from '../supabase'
 
-type OdPlatform = '99food' | 'keeta' | 'cardapio_web'
+type OdPlatform = '99food' | 'keeta'
 
 interface PlatformConfig {
   platform: OdPlatform
@@ -23,11 +23,6 @@ const PLATFORM_CONFIGS: PlatformConfig[] = [
     platform: 'keeta',
     backendKey: 'keeta',
     alwaysPlatformLogistics: true,
-  },
-  {
-    platform: 'cardapio_web',
-    backendKey: 'cardapio_web',
-    alwaysPlatformLogistics: false,
   },
 ]
 

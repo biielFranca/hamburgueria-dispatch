@@ -49,7 +49,7 @@ Estado de elegibilidade de rota para pedidos com logística da plataforma (ex: K
 Contador na tabela `orders`. Incrementa cada vez que uma sugestão de despacho contendo esse pedido é recusada. Após 3 rejeições, o pedido é marcado como `dispatch_timeout`.
 
 ### Open Delivery
-Padrão brasileiro de API para delivery de comida. Usado por 99Food, Keeta e Cardápio Web. O Hamburgueria Dispatch implementa um cliente multi-plataforma para esse padrão.
+Padrão brasileiro de API para delivery de comida. Usado por 99Food e Keeta no Hamburgueria Dispatch.
 
 ## Convenções de Nomenclatura
 

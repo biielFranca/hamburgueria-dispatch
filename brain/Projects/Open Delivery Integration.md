@@ -1,7 +1,7 @@
 # Integração Open Delivery
 
 ## Resumo
-Integração com plataformas que seguem o padrão Open Delivery: 99Food, Keeta e Cardápio Web. A biblioteca existe (`openDelivery.ts`) mas a UI está oculta. Pedidos da Keeta são especiais — sempre usam logística da plataforma e nunca entram na fila de despacho.
+Integração com plataformas que seguem o padrão Open Delivery: 99Food e Keeta. Pedidos da Keeta são especiais — sempre usam logística da plataforma e nunca entram na fila de despacho.
 
 ## Fonte
 - `hamburgueria-dispatch/src/lib/integrations/openDelivery.ts`
@@ -20,7 +20,6 @@ Integração com plataformas que seguem o padrão Open Delivery: 99Food, Keeta e
 |------------|-----------|-----------|----------------------|
 | 99Food | Open Delivery | Própria (configurável) | Entra na fila de despacho |
 | Keeta | Open Delivery | **Apenas da plataforma** | `external_monitoring` sempre |
-| Cardápio Web | Open Delivery + webhook | Própria | Entra na fila de despacho |
 
 ## Regra Especial da Keeta
 A Keeta sempre usa seus próprios entregadores.
@@ -39,8 +38,6 @@ A Keeta sempre usa seus próprios entregadores.
 ```
 VITE_99FOOD_CLIENT_ID / VITE_99FOOD_CLIENT_SECRET
 VITE_KEETA_CLIENT_ID / VITE_KEETA_CLIENT_SECRET
-VITE_CARDAPIOWEB_CLIENT_ID / VITE_CARDAPIOWEB_CLIENT_SECRET
-VITE_CARDAPIOWEB_WEBHOOK_SECRET
 ```
 
 ## Tratamento de Erros

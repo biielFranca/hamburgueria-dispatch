@@ -18,7 +18,7 @@ Plano de execução do Hamburgueria Dispatch. v1 entregue e concluída. Priorida
 - Classificador logístico (5 regras + padrão) com serviço Realtime em background
 - Motor de rotas (otimização de par + fallback de pedido único + contagem de rejeições)
 - Integração iFood (OAuth2, polling, Edge Function, gestão de credenciais)
-- Biblioteca Open Delivery (99Food, Keeta, Cardápio Web — apenas lib, UI oculta)
+- Biblioteca Open Delivery (99Food, Keeta)
 - Sistema de alertas (3 níveis, áudio via Web Audio API)
 - Preenchimento por CEP no OrderForm + Configurações
 - Gestão de usuários com papel + permissões granulares por página
@@ -76,14 +76,12 @@ Plano de execução do Hamburgueria Dispatch. v1 entregue e concluída. Priorida
 
 ### Fase 4: Ativar Integrações de Plataformas
 **Objetivos:**
-- Habilitar 99Food, Cardápio Web e Keeta em produção
+- Habilitar 99Food e Keeta em produção
 - Mostrar cards de integração em Configurações → Conexões
 
 **Entregas:**
 - [ ] UI para credenciais + toggle do 99Food
-- [ ] UI para credenciais + toggle do Cardápio Web
 - [ ] UI para credenciais + toggle da Keeta
-- [ ] Handler de webhook para Cardápio Web
 - [ ] Testes com credenciais reais das plataformas
 
 ---

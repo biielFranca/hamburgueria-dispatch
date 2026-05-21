@@ -2,7 +2,7 @@
 //
 // Active orders older than this threshold drop off the live views and live
 // only in Relatórios. Avoids stale-queue buildup when a platform replays
-// historical data (e.g. Cardápio Web polling backfill on first connect).
+// historical data on first connect.
 
 export const ACTIVE_ORDER_MAX_AGE_HOURS = 8
 export const ACTIVE_ORDER_MAX_AGE_MS = ACTIVE_ORDER_MAX_AGE_HOURS * 60 * 60 * 1000

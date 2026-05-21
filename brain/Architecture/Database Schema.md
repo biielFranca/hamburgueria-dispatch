@@ -39,7 +39,7 @@ longitude   float
 Todos os pedidos recebidos de todas as plataformas.
 ```sql
 id                    uuid PRIMARY KEY
-platform              text  -- 'ifood' | '99food' | 'keeta' | 'cardapio_web' | 'manual'
+platform              text  -- 'ifood' | '99food' | 'keeta'
 platform_order_id     text  -- ID externo da plataforma
 store_id              uuid (FK → stores)
 status                text  -- enum OrderStatus
@@ -95,7 +95,7 @@ Credenciais de plataformas por loja.
 ```sql
 id            uuid PRIMARY KEY
 store_id      uuid (FK → stores)
-platform      text  -- 'ifood' | '99food' | 'keeta' | 'cardapio_web'
+platform      text  -- 'ifood' | '99food' | 'keeta'
 active        boolean
 client_id     text
 client_secret text  -- texto plano (problema de segurança — veja Registro de Decisões)
@@ -122,7 +122,7 @@ fired_at   timestamptz DEFAULT now()
 ## Enums (TypeScript — `src/types/index.ts`)
 
 ```typescript
-Platform = 'ifood' | '99food' | 'keeta' | 'cardapio_web' | 'manual'
+Platform = 'ifood' | '99food' | 'keeta'
 UserRole = 'owner' | 'admin' | 'operator'
 OrderStatus = 'new' | 'awaiting_route' | 'in_suggestion' | 'dispatched' | 'cancelled'
 RouteEligibility = 'eligible' | 'blocked' | 'awaiting' | 'external_monitoring'
