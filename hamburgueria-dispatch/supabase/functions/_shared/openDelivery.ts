@@ -495,7 +495,6 @@ export async function verifyWebhookSignature(
   signature?: string,
 ): Promise<{ ok: boolean; reason?: string }> {
   const cleanSignature = signature?.trim()
-  if (!cleanSignature) return { ok: true }
 
   const sb = getServiceClient()
   const integration = await getIntegration(sb, storeId, platform)
@@ -510,8 +509,15 @@ export async function verifyWebhookSignature(
   if (!secret) {
     return {
       ok: false,
-      reason: 'Assinatura recebida, mas webhook_secret/client_secret não está configurado na integração da loja',
+      reason: 'webhook_secret/client_secret não está configurado na integração da loja',
     }
+  }
+
+  // Sem assinatura não há o que verificar. Como estas funções rodam com
+  // verify_jwt = false, aceitar a requisição aqui deixaria qualquer pessoa
+  // injetar pedidos forjados: a assinatura é a única prova de origem.
+  if (!cleanSignature) {
+    return { ok: false, reason: 'Assinatura do webhook ausente' }
   }
 
   const key = await crypto.subtle.importKey(
