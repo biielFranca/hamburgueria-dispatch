@@ -60,9 +60,25 @@ Sem isso não dá para medir nada nem mexer com segurança.
   3. Logs de `function_edge_logs` das últimas 24h agrupados por função e status (`query_logs`).
 - **Pronto quando:** tabela "função × chamadas/dia × origem" preenchida abaixo.
 
-| Função | Chamadas/dia | Origem |
+**Levantamento (25/set/2026, projeto recém-reativado):**
+
+- Banco: 1 loja, **0 pedidos**, 0 `execution_logs`. Integrações iFood/Keeta/99Food todas `active = false`, nenhuma com `webhook_secret`.
+- `pg_cron` e `pg_net` **não instalados** — não há cron consumindo Edge neste projeto.
+- Edge Functions deployadas: `ifood-sync` (agora versionada em `supabase/functions/ifood-sync`), `open-delivery-*` (3), `classify-orders`, `run-route-engine`, `compute-alert-state`, e `cardapio-web-native-webhook` / `cardapio-web-native-poll` (suporte removido do código em `7d7569f`, mas **ainda deployadas** — apagar).
+- `ifood-dispatch-confirm` **não existe** no deploy nem no histórico do git: a confirmação de despacho do iFood sempre falha.
+- **Conclusão Inferred:** com zero pedidos e integrações desligadas, este projeto dificilmente é o grande consumidor. No plano free, egress e invocações Edge são **cotas da organização**, somadas entre todos os projetos (Minhas Finanças com Open Finance, Fechamento de Caixa, etc.). Confirmar na tela *Usage* da org, por projeto, antes de atribuir o estouro ao Dispatch.
+
+**Achados de segurança (advisors + SQL) — tratar antes da Fase 1:**
+
+| Severidade | Achado | Ação |
 |---|---|---|
-| _preencher_ | | |
+| 🔴 Crítico | Policy `integrations_all` em `store_integrations`: `ALL` para `public` com `using (true)`. Qualquer um com a anon key (que vai dentro do app) lê, altera e apaga integrações — incluindo `client_secret` e `access_token` do iFood | Dropar a policy; **rotacionar as credenciais do iFood** no portal |
+| 🔴 Crítico | `ifood-sync` sem autenticação (`verify_jwt = false`, sem checagem): qualquer um dispara sync de qualquer `storeId`; `testMode` funciona como proxy aberto de teste de credenciais | Item 1.4 |
+| 🟠 Alto | 20 funções `SECURITY DEFINER` executáveis por `anon` via RPC (`deduct_stock_for_item`, `enqueue_retry`, `recompute_*`, `check_user_login`…) | `revoke execute ... from anon, authenticated` nas que só o backend usa |
+| 🟠 Alto | Views `recent_errors` e `order_pipeline_latency` com `SECURITY DEFINER` (ignoram RLS) | Recriar com `security_invoker = on` |
+| 🟡 Médio | `idempotency_keys` e `retry_queue` com RLS sem policy (ok se só service role acessa — confirmar) | Documentar |
+| 🟡 Médio | 3 funções com `search_path` mutável; proteção contra senha vazada desligada | Fixar `search_path`; ligar no Auth |
+| ⚪ Perf | 9 policies com `auth.*()` sem `(select ...)`; 20 grupos de policies permissivas duplicadas; 15 FKs sem índice | Consolidar policies na Fase 5 — irrelevante no volume atual |
 
 ### 0.4 CI mínimo
 - **Por quê:** 90 testes existem mas só rodam se alguém lembrar. As fases seguintes mexem em lógica central — sem CI, regressão passa.
