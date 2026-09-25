@@ -128,10 +128,21 @@ Policies se somam com **OU**: basta uma liberar para o acesso ser liberado. Por 
   3. Gravar o novo segredo **só depois** de 0.5.1 aplicada.
 - **Pronto quando:** credencial antiga revogada no portal.
 
-### 0.5.3 Autenticar `ifood-sync` e remover funções mortas 🔴
+### 0.5.3 Autenticar `ifood-sync` e remover funções mortas 🔴 — 🟡 Parcial (25/set/2026)
+> **Feito:** `ifood-sync` v11 deployada. Usa `_shared/requireStore.ts` (`resolveStoreScope`): usuário logado → `storeId` vem de `users.store_id` (body divergente → 403); chave service role → aceita `storeId` do body (é o caminho do cron do item 1.3, sem precisar de segredo extra); sem token ou token inválido → 401. `testMode` **removido** — nenhuma tela usava. Front (`src/lib/ifood.ts`) passou a enviar o JWT do usuário em vez da anon key. `tsc` limpo, 90 testes passando. Código deployado conferido contra o repo.
+> **Pendente:**
+> - Teste HTTP real (o ambiente de execução do agente não alcança `supabase.co`): rodar os comandos de verificação abaixo na máquina do dono.
+> - Apagar `cardapio-web-native-webhook` e `cardapio-web-native-poll`: o MCP do Supabase não tem ação de delete — fazer pelo dashboard (Edge Functions → função → Delete) ou `supabase functions delete <nome>`.
+>
+> Verificação (PowerShell, esperado **401** nas duas):
+> ```powershell
+> curl.exe -s -o NUL -w "%{http_code}" -X POST https://cuvhtdtkuwewslozddfw.supabase.co/functions/v1/ifood-sync -H "Content-Type: application/json" -d "{}"
+> curl.exe -s -o NUL -w "%{http_code}" -X POST https://cuvhtdtkuwewslozddfw.supabase.co/functions/v1/ifood-sync -H "Authorization: Bearer invalido" -H "Content-Type: application/json" -d "{}"
+> ```
+
 - **Por quê:** a função roda com `verify_jwt = false` e não checa nada: qualquer pessoa na internet dispara sync de qualquer `storeId` (consome cota Edge e a API do iFood em nome da loja). O `testMode` recebe `clientId`/`clientSecret` e responde se são válidos — um testador de credenciais aberto. As funções `cardapio-web-native-*` continuam deployadas sem uso: superfície de ataque sem benefício.
 - **Como:**
-  1. Em `ifood-sync`, aceitar só dois chamadores: (a) usuário logado → `storeId` derivado do JWT via `_shared/requireStore.ts`, ignorando o body; (b) o cron da Fase 1.3 → header com segredo guardado em variável de ambiente da função. Qualquer outro → 401.
+  1. Em `ifood-sync`, aceitar só dois chamadores: (a) usuário logado → `storeId` derivado do JWT via `_shared/requireStore.ts`, ignorando o body; (b) o cron da Fase 1.3 → chave service role (guardada no Vault do banco). Qualquer outro → 401.
   2. `testMode`: exigir usuário logado com papel de dono.
   3. Apagar `cardapio-web-native-webhook` e `cardapio-web-native-poll` do projeto (`supabase functions delete`). O código continua no histórico do git (`f86f4e5`).
   4. A parte de front (módulo único, `functions.invoke`) continua no item 1.4.
@@ -186,7 +197,7 @@ Maior impacto no custo e na correção. Os itens se sobrepõem no mesmo código,
 - **Por quê:** `IfoodPoller` e `OpenDeliveryPoller` chamam Edge a cada 30s **por janela e por plataforma** (até 6 chamadas/min/janela ≈ 8.600/dia). Com dev + tauri + reload do Vite duplicando intervals, estoura 500 mil/mês. E com o app fechado, pedido do iFood não entra.
 - **Como:**
   1. **Open Delivery (Keeta, 99Food):** pedido entra por **webhook** (já existe, com HMAC). `open-delivery-sync` vira reconciliação via `pg_cron` a cada 5 min, iterando todas as lojas ativas numa só invocação.
-  2. **iFood:** a API exige polling. `pg_cron` a cada 30s chama `ifood-sync` via `pg_net`, autenticado por um segredo guardado no Vault (header dedicado, não a anon key). A função itera todas as lojas com integração ativa.
+  2. **iFood:** a API exige polling. `pg_cron` a cada 30s chama `ifood-sync` via `pg_net`, autenticado com a chave service role guardada no Vault (a função já aceita esse caminho desde 0.5.3). A função itera todas as lojas com integração ativa.
   3. Os componentes viram só **indicadores de status** (lendo `last_sync_at` / erro de `store_integrations`) + botão "sincronizar agora".
 - **Consumo esperado:** iFood ≈ 2.880/dia + OD ≈ 288/dia ≈ 95 mil/mês, **fixo**, independente de janelas abertas.
 - **Risco:** médio. Mitigação: manter o botão manual durante a transição.

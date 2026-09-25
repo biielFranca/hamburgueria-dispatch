@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveStoreScope } from '../_shared/requireStore.ts'
 
 const BASE        = 'https://merchant-api.ifood.com.br'
 const AUTH_URL    = `${BASE}/authentication/v1.0/oauth/token`
@@ -11,9 +12,9 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-function reply(body: Record<string, unknown>) {
+function reply(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' },
   })
 }
@@ -133,26 +134,15 @@ Deno.serve(async (req: Request) => {
     // body not JSON — ignore
   }
 
-  const { storeId, testMode, clientId: tId, clientSecret: tSecret } = parsed
-
-  // ── Test mode ──────────────────────────────────────────────────
-  if (testMode) {
-    if (!tId || !tSecret) {
-      return reply({ ok: false, error: 'clientId e clientSecret são obrigatórios' })
-    }
-    try {
-      const { token } = await getToken(tId, tSecret)
-      const events   = await getEvents(token)
-      return reply({ ok: true, events: events.length })
-    } catch (e) {
-      return reply({ ok: false, error: e instanceof Error ? e.message : String(e) })
-    }
+  // Security: storeId comes from the caller's JWT (users.store_id). Only a
+  // service-role caller (cron) may pass storeId in the body. Anything else
+  // is rejected before touching iFood or the database.
+  const bodyStoreId = typeof parsed.storeId === 'string' ? parsed.storeId.trim() : undefined
+  const auth = await resolveStoreScope(req, bodyStoreId)
+  if (!auth.ok) {
+    return reply({ ok: false, error: auth.error, inserted: 0, events: 0, errors: [] }, auth.status)
   }
-
-  // ── Sync mode ──────────────────────────────────────────────────
-  if (!storeId) {
-    return reply({ ok: false, error: 'storeId é obrigatório', inserted: 0, events: 0, errors: [] })
-  }
+  const storeId = auth.storeId
 
   try {
     const sb = createClient(
