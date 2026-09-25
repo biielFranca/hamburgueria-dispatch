@@ -204,8 +204,8 @@ Achados ao testar com a loja de teste do iFood (nenhum pedido iFood jamais tinha
 - **Como:** `alter view public.recent_errors set (security_invoker = on);` (idem para a outra). Se forem só para diagnóstico, revogar `select` de `anon, authenticated`.
 - **Pronto quando:** advisor `security_definer_view` zerado.
 
-### 0.5.6 Ajustes menores 🟡 — 🟡 Quase concluído (26/set/2026)
-> `search_path` fixo nas 3 funções (mesma migration); trigger `updated_at` e policies com `get_user_store_id` testados OK. `idempotency_keys`/`retry_queue` registradas como intencionais (Decisão 011). **Pendente (dono):** ligar *Leaked password protection* no dashboard.
+### 0.5.6 Ajustes menores 🟡 — ✅ Concluído (26/set/2026)
+> `search_path` fixo nas 3 funções (mesma migration); trigger `updated_at` e policies com `get_user_store_id` testados OK. `idempotency_keys`/`retry_queue` registradas como intencionais (Decisão 011). *Leaked password protection* só existe no plano Pro → movido para o item 4.1; o aviso do advisor fica justificado até lá.
 
 - Fixar `search_path` em `trg_set_updated_at`, `update_updated_at`, `get_user_store_id` (`alter function ... set search_path = public, pg_temp;`).
 - Ligar *Leaked password protection* em Auth → Settings (dashboard).
@@ -344,6 +344,7 @@ Esse código recebe os pedidos — é onde erro custa dinheiro.
 ### 4.1 Supabase Pro
 - **Por quê:** o free pausa por inatividade (já aconteceu) e tem cotas baixas. Uma pausa durante o turno derruba a operação.
 - **Quando:** antes do primeiro dia real, não antes.
+- **Ao assinar:** ligar *Leaked password protection* em Auth → Settings (só disponível no Pro; veio do item 0.5.6).
 
 ### 4.2 Criptografar segredos com Supabase Vault
 - **Por quê:** `client_secret`, `webhook_secret`, `api_aberta_*` estão em texto puro — a migration de pgsodium falhou por falta da extensão.
