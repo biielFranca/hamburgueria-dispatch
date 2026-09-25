@@ -279,6 +279,30 @@ Aceita (26/set/2026)
 
 ---
 
+## Decisão 013
+### Título
+Pedido aberto há mais de 12 h é encerrado automaticamente
+
+### Status
+Aceita (26/set/2026)
+
+### Contexto
+Pedido cujo evento de fim nunca chega (evento da plataforma perdido, pedido manual que ninguém finalizou) ficava aberto para sempre: o classificador do front o regravava a cada minuto e ele contava como ativo. Os pedidos de teste #9361 e #3924 ficaram assim.
+
+### Decisão
+Job `pg_cron` `close-stale-orders` (minuto 15 de cada hora) chama `private.close_stale_orders()`: pedido com `created_at` há mais de 12 h e ainda não `delivered`/`cancelled` → `dispatched` vira `delivered`, qualquer outro vira `cancelled`. Cada um ganha um `order_events` `auto_closed` (`metadata.reason = 'stale'`) para distinguir de cancelamento real.
+
+### Consequências
+- ✅ SQL puro no banco: zero invocação de Edge Function, zero egress
+- ✅ Função no schema `private` (Decisão 010)
+- ❌ `cancelled` automático não significa que o cliente cancelou — relatórios devem filtrar pelo evento `auto_closed`
+- `pg_cron` agora está instalado; o cron do roadmap 1.3 (que também precisa de `pg_net`) continua pendente
+
+### Fonte
+`supabase/migrations/20260926f_auto_close_stale_orders.sql`
+
+---
+
 ## Notas Relacionadas
 - [[Visão Geral do Projeto]]
 - [[Sistema de Autenticação]]
