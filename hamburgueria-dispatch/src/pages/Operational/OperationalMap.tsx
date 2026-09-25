@@ -202,10 +202,11 @@ export default function OperationalMap({
       zoomControl={true}
     >
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a> &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>'
-        subdomains="abcd"
-        maxZoom={20}
+        // CARTO basemaps now require an API key; OSM tiles need none and the
+        // .op-map .leaflet-tile CSS filter already tints them to the dark theme.
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a>'
+        maxZoom={19}
       />
 
       {routeCoords.length >= 2 && (
