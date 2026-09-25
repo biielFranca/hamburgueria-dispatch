@@ -9,6 +9,7 @@ Ponto de entrada da base de conhecimento do Hamburgueria Dispatch. Este vault do
 - [[Registro de Decisões]]
 - [[Registro de Pendências]]
 - [[Roadmap]]
+- [[Roadmap de Estabilização]]
 - [[Biblioteca de Prompts]]
 - [[Glossário]]
 
