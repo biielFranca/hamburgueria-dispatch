@@ -22,7 +22,7 @@ Análise do código na branch `claude/awesome-mccarthy-cjblse` (set/2026):
 |---|---|---|---|
 | **0 — Destravar** | Ter visibilidade e o código completo no repo | 0,5–1 dia | Tudo |
 | **0.5 — Segurança crítica** | Fechar as brechas achadas no levantamento | 0,5–1 dia | Tudo que vem depois |
-| **1 — Parar o consumo** | Egress e Edge sob controle; remover duplicação | 2–3 dias | Fase 2, produção |
+| **1 — Parar o consumo** | Egress e Edge sob controle; remover duplicação; alerta de pedido novo | 2–3 dias | Fase 2, produção |
 | **2 — Tela Operacional** | Updates incrementais + quebra do god component | 2–3 dias | — |
 | **3 — Integrações confiáveis** | Testes e estrutura das Edge Functions de pedido | 2 dias | Produção |
 | **4 — Pré-produção** | Plano, segredos, ensaio ponta a ponta | 1–2 dias | Primeiro turno real |
@@ -246,6 +246,21 @@ Maior impacto no custo e na correção. Os itens se sobrepõem no mesmo código,
 - **Por quê:** `src/pages/Dev` (701 linhas) cria pedidos falsos e roda o route engine. Hoje é escondida só por permissão — vai dentro do executável.
 - **Como:** registrar a rota e o botão da sidebar só quando `import.meta.env.DEV`; import dinâmico para o Vite descartar o módulo no build.
 - **Pronto quando:** `npm run build` não contém o código da página.
+
+### 1.6 Alerta de pedido novo (som + notificação do Windows)
+- **Por quê:** pedido chega em silêncio (visto no primeiro teste real com o iFood, 25/set). Em operação, pedido sem alerta é pedido esquecido — **bloqueia o primeiro turno real (Fase 4)**.
+- **O que já existe:** `src/lib/alertSound.ts` (sons por nível, mute), `src/lib/notify.ts` (Notification API, funciona no WebView2, com preferência liga/desliga) e `AlertSystem` assinando `orders` via Realtime com filtro por loja.
+- **Problemas encontrados:**
+  1. `AlertSystem` só dispara quando `alert_level` aparece/sobe (atraso). Não há alerta para `INSERT` de pedido novo.
+  2. `alert_level` é calculado pela Edge Function `compute-alert-state`, que **não tem cron** → nem o alerta de atraso funciona hoje. Resolve junto com o cron do item 1.3.
+- **Como:**
+  1. No `AlertSystem`, tratar `INSERT` em `orders` (loja atual): tocar um som próprio de "pedido novo" (distinto dos de atraso), mostrar card com plataforma + código + cliente e disparar `notify()` (aparece mesmo com o app minimizado).
+  2. Ignorar pedidos criados há mais de ~2 min (evita rajada de sons ao reabrir o app/reconectar Realtime).
+  3. Som repete a cada ~30 s até alguém abrir/aceitar o pedido (configurável; padrão de mercado nos painéis de delivery). Respeita o mute existente.
+  4. Pedir permissão de notificação no primeiro login do operador, não em tela escondida.
+  5. `pg_cron` para `compute-alert-state` (a cada 1 min) junto com o item 1.3 — só então o alerta de atraso passa a funcionar.
+- **Esforço:** 1–2 h (item 1–4) + o cron do item 1.3.
+- **Pronto quando:** pedido novo toca e aparece como notificação do Windows com o app minimizado; reabrir o app não toca alertas antigos; pedido atrasado sobe de nível sozinho.
 
 ### Critério de saída da Fase 1
 Medir 24h de uso normal com uma janela aberta e registrar aqui:
