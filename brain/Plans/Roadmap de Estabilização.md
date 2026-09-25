@@ -118,7 +118,9 @@ Policies se somam com **OU**: basta uma liberar para o acesso ser liberado. Por 
 - **Risco:** baixo. As policies do dono continuam. Testar: dono salva e ativa integração; operador não vê segredos; requisição com anon key sem login retorna vazio.
 - **Pronto quando:** `select` com anon key em `store_integrations` retorna 0 linhas; advisors sem achado nessa tabela.
 
-### 0.5.2 Rotacionar as credenciais do iFood 🔴 (ação do dono)
+### 0.5.2 Rotacionar as credenciais do iFood 🔴 (ação do dono) — ✅ Concluído (25/set/2026)
+> Novo `client_secret` gerado no portal e gravado pelo dashboard (não passou pelo chat nem pelo repo). `access_token`/`token_expires_at` limpos. Integração mantida `active = false` até o 0.5.3.
+
 - **Por quê:** o `client_secret` e o `access_token` ficaram expostos publicamente desde que a policy foi criada. Remover a policy não "desvaza" o que já pode ter sido lido.
 - **Como:**
   1. No Portal do Desenvolvedor iFood, gerar novo `clientSecret` (invalida o antigo).
