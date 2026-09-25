@@ -128,13 +128,11 @@ Policies se somam com **OU**: basta uma liberar para o acesso ser liberado. Por 
   3. Gravar o novo segredo **só depois** de 0.5.1 aplicada.
 - **Pronto quando:** credencial antiga revogada no portal.
 
-### 0.5.3 Autenticar `ifood-sync` e remover funções mortas 🔴 — 🟡 Parcial (25/set/2026)
+### 0.5.3 Autenticar `ifood-sync` e remover funções mortas 🔴 — ✅ Concluído (25/set/2026)
 > **Feito:** `ifood-sync` v11 deployada. Usa `_shared/requireStore.ts` (`resolveStoreScope`): usuário logado → `storeId` vem de `users.store_id` (body divergente → 403); chave service role → aceita `storeId` do body (é o caminho do cron do item 1.3, sem precisar de segredo extra); sem token ou token inválido → 401. `testMode` **removido** — nenhuma tela usava. Front (`src/lib/ifood.ts`) passou a enviar o JWT do usuário em vez da anon key. `tsc` limpo, 90 testes passando. Código deployado conferido contra o repo.
-> **Pendente:**
-> - Teste HTTP real (o ambiente de execução do agente não alcança `supabase.co`): rodar os comandos de verificação abaixo na máquina do dono.
-> - Apagar `cardapio-web-native-webhook` e `cardapio-web-native-poll`: o MCP do Supabase não tem ação de delete — fazer pelo dashboard (Edge Functions → função → Delete) ou `supabase functions delete <nome>`.
+> **Verificado pelo dono:** as duas chamadas abaixo retornaram **401**. `cardapio-web-native-webhook` e `cardapio-web-native-poll` apagadas pelo dashboard (confirmado na listagem).
 >
-> Verificação (PowerShell, esperado **401** nas duas):
+> Comandos de verificação (PowerShell):
 > ```powershell
 > curl.exe -s -o NUL -w "%{http_code}" -X POST https://cuvhtdtkuwewslozddfw.supabase.co/functions/v1/ifood-sync -H "Content-Type: application/json" -d "{}"
 > curl.exe -s -o NUL -w "%{http_code}" -X POST https://cuvhtdtkuwewslozddfw.supabase.co/functions/v1/ifood-sync -H "Authorization: Bearer invalido" -H "Content-Type: application/json" -d "{}"
@@ -147,6 +145,26 @@ Policies se somam com **OU**: basta uma liberar para o acesso ser liberado. Por 
   3. Apagar `cardapio-web-native-webhook` e `cardapio-web-native-poll` do projeto (`supabase functions delete`). O código continua no histórico do git (`f86f4e5`).
   4. A parte de front (módulo único, `functions.invoke`) continua no item 1.4.
 - **Pronto quando:** chamada sem JWT/segredo → 401; lista de funções deployadas = lista em `supabase/functions/`.
+
+### 0.5.3b Deploy desatualizado das demais Edge Functions 🔴
+- **Achado (25/set/2026):** as correções de segurança do repo **nunca foram deployadas**. Datas do deploy × commits:
+
+  | Função | Deploy em produção | Correção no repo |
+  |---|---|---|
+  | `open-delivery-webhook` | 20/abr | `f240e7d` (17/set) — recusa webhook sem assinatura |
+  | `open-delivery-sync`, `open-delivery-dispatch-confirm` | 12/abr | `a0cae8a` (07/mai) — `storeId` do JWT |
+  | `classify-orders`, `run-route-engine` | 19/abr | `a0cae8a` (07/mai) — `storeId` do JWT |
+  | `compute-alert-state` | 19/abr | sem autenticação nem no repo |
+
+  Confirmado lendo o código deployado do webhook: `if (!cleanSignature) return { ok: true }` — requisição **sem assinatura é aceita**. Qualquer um pode injetar pedidos falsos numa loja com integração Open Delivery ativa. Hoje o impacto é nulo só porque todas as integrações estão `active = false` e há 0 pedidos.
+- **Por quê:** o README e o histórico dizem que isso está resolvido — em produção não está.
+- **Como:**
+  1. Redeploy de todas as funções a partir do repo (`supabase functions deploy` para cada uma, incluindo `_shared/`).
+  2. `compute-alert-state`: aceitar só service role (é disparada por cron) usando `resolveStoreScope`/checagem do bearer.
+  3. Conferir o código deployado contra o repo (mesmo procedimento do `ifood-sync`).
+  4. Testes HTTP: webhook sem assinatura → recusado; sync sem JWT → 401.
+  5. Regra daqui pra frente: **mudança em `supabase/functions` só é considerada concluída depois do deploy + verificação** (vira passo do CI na Fase 0.4 quando possível).
+- **Pronto quando:** toda função deployada = versão do repo; testes HTTP negativos passando.
 
 ### 0.5.4 Revogar RPC pública das funções `SECURITY DEFINER` 🟠
 - **O que é o problema:** 20 funções do schema `public` rodam com privilégio do dono do banco (ignoram RLS) e ficam expostas como endpoint `/rest/v1/rpc/<nome>` para `anon` e `authenticated`. Ex.: qualquer visitante pode chamar `deduct_stock_for_item` (dar baixa em estoque de qualquer loja), `enqueue_retry`, `resolve_retry`, `recompute_*`, `check_user_login` (enumerar usuários).
