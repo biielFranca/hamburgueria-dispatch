@@ -79,6 +79,14 @@ async function ackEvents(token: string, ids: string[]) {
   })
 }
 
+// Events that end an order on iFood → our terminal status. Without this a
+// cancelled or concluded order stayed open in our DB forever.
+function terminalStatus(ev: any): 'cancelled' | 'delivered' | null {
+  if (ev.code === 'CAN' || ev.fullCode === 'CANCELLED') return 'cancelled'
+  if (ev.code === 'CON' || ev.fullCode === 'CONCLUDED') return 'delivered'
+  return null
+}
+
 const PAY: Record<string, string> = {
   CREDIT: 'credit_card', DEBIT: 'debit_card', CASH: 'cash',
   PIX: 'pix', ONLINE: 'online', MEAL_VOUCHER: 'meal_voucher', FOOD_VOUCHER: 'meal_voucher',
@@ -216,13 +224,32 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // After PLACED, so a PLACED + CAN in the same batch ends up cancelled.
+    // Orders we never stored (placed before the integration) match 0 rows — fine.
+    let closed = 0
+    for (const ev of events) {
+      const status = terminalStatus(ev)
+      if (!status) continue
+      const { data, error: ue } = await sb.from('orders')
+        .update({ status })
+        .eq('store_id', storeId)
+        .eq('platform', 'ifood')
+        .eq('platform_order_id', ev.orderId)
+        .not('status', 'in', '("delivered","cancelled")')
+        .select('id')
+      if (ue) {
+        errors.push(`${ev.orderId}: ${ue.message}`)
+        failedEventIds.add(ev.id)
+      } else closed += data?.length ?? 0
+    }
+
     await ackEvents(token, events.filter((e: any) => !failedEventIds.has(e.id)).map((e: any) => e.id))
     await sb.from('store_integrations').update({
       last_sync_at: new Date().toISOString(),
       last_error:   errors.length ? errors.join('; ') : null,
     }).eq('id', integration.id)
 
-    return reply({ ok: true, inserted, events: events.length, errors })
+    return reply({ ok: true, inserted, closed, events: events.length, errors })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('ifood-sync fatal:', msg)
