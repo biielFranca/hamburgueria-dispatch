@@ -215,6 +215,70 @@ Operadores precisavam de controle granular de acesso por página, além da hiera
 
 ---
 
+## Decisão 010
+### Título
+Funções internas do banco no schema `private`, sem revogar EXECUTE
+
+### Status
+Aceita (26/set/2026)
+
+### Contexto
+20 funções `SECURITY DEFINER` estavam chamáveis pela API pública (`/rest/v1/rpc`). Revogar `EXECUTE` fez o Postgres desta instância (`17.6.1.104`) cair com segfault sempre que uma chamada era recusada — qualquer visitante poderia derrubar o banco.
+
+### Decisão
+Mover as funções internas para o schema `private` (não exposto por PostgREST/pg_graphql, sem `usage` para anon/authenticated) em vez de revogar `EXECUTE`. Ficam em `public` só os 4 helpers usados pelas policies (`auth_role`, `auth_store_id`, `get_my_store_id`, `get_user_store_id`) e, temporariamente, `recompute_all_alert_levels` (chamada pela Edge Function `compute-alert-state` até o cron do roadmap 1.3).
+
+### Consequências
+- ✅ Chamada pela API a função interna nem chega ao banco (404 do PostgREST)
+- ✅ Triggers continuam funcionando (apontam por OID)
+- ❌ Não revogar EXECUTE em funções de `public` enquanto a instância tiver o bug — usar sempre o schema `private` para funções internas novas
+- ❌ Advisor continua listando os 5 itens intencionais acima
+
+### Fonte
+`supabase/migrations/20260926c_move_internal_functions_to_private.sql`, [[Roadmap de Estabilização]] item 0.5.4
+
+---
+
+## Decisão 011
+### Título
+`idempotency_keys` e `retry_queue` com RLS ligado e sem policy
+
+### Status
+Aceita (26/set/2026)
+
+### Contexto
+O advisor `rls_enabled_no_policy` aponta as duas tabelas.
+
+### Decisão
+Comportamento intencional: só o backend (Edge Functions com service role, que ignora RLS) lê e escreve nelas. Sem policy, anon e authenticated não enxergam nenhuma linha.
+
+### Consequências
+- ✅ Nenhuma exposição pela API
+- ❌ O advisor continua mostrando o aviso (nível INFO) — ignorar
+
+### Fonte
+[[Roadmap de Estabilização]] item 0.5.6
+
+---
+
+## Decisão 012
+### Título
+Views de diagnóstico fora da API
+
+### Status
+Aceita (26/set/2026)
+
+### Contexto
+`recent_errors` e `order_pipeline_latency` rodavam como dono (ignorando RLS) e eram legíveis pela anon key — expunham erros e latências de todas as lojas.
+
+### Decisão
+`security_invoker = on` e sem `SELECT` para anon/authenticated. Consulta só pelo dashboard / service role. Se um dia o app precisar delas, liberar para `authenticated` (o RLS das tabelas de origem passa a valer).
+
+### Fonte
+`supabase/migrations/20260926d_secure_views_and_search_path.sql`
+
+---
+
 ## Notas Relacionadas
 - [[Visão Geral do Projeto]]
 - [[Sistema de Autenticação]]

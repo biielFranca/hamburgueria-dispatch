@@ -197,12 +197,16 @@ Achados ao testar com a loja de teste do iFood (nenhum pedido iFood jamais tinha
   3. Rodar os testes de RLS manualmente: login de operador e dono, listar pedidos, aceitar sugestão, despachar.
 - **Pronto quando:** advisors `anon_security_definer_function_executable` zerado; app funciona para operador e dono.
 
-### 0.5.5 Views sem `SECURITY DEFINER` 🟠
+### 0.5.5 Views sem `SECURITY DEFINER` 🟠 — ✅ Concluído (26/set/2026)
+> Além de ignorarem RLS, as duas views eram legíveis pela anon key (expunham erros e latências de todas as lojas). `security_invoker = on` + sem `SELECT` para anon/authenticated (nenhum código usa; diagnóstico pelo dashboard). Migration `20260926d_secure_views_and_search_path.sql`. Advisor `security_definer_view` zerado. Decisão 012.
+
 - **Por quê:** `recent_errors` e `order_pipeline_latency` rodam com permissão do criador e ignoram RLS — um usuário de uma loja veria erros e latências de todas.
 - **Como:** `alter view public.recent_errors set (security_invoker = on);` (idem para a outra). Se forem só para diagnóstico, revogar `select` de `anon, authenticated`.
 - **Pronto quando:** advisor `security_definer_view` zerado.
 
-### 0.5.6 Ajustes menores 🟡
+### 0.5.6 Ajustes menores 🟡 — 🟡 Quase concluído (26/set/2026)
+> `search_path` fixo nas 3 funções (mesma migration); trigger `updated_at` e policies com `get_user_store_id` testados OK. `idempotency_keys`/`retry_queue` registradas como intencionais (Decisão 011). **Pendente (dono):** ligar *Leaked password protection* no dashboard.
+
 - Fixar `search_path` em `trg_set_updated_at`, `update_updated_at`, `get_user_store_id` (`alter function ... set search_path = public, pg_temp;`).
 - Ligar *Leaked password protection* em Auth → Settings (dashboard).
 - `idempotency_keys` e `retry_queue`: RLS sem policy é o comportamento desejado (só service role acessa). Registrar a decisão em [[Decision Log]] para o advisor não virar ruído.
