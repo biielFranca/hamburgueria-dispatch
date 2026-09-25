@@ -191,7 +191,8 @@ Deno.serve(async (req: Request) => {
       // Codes only (no customer data) — lets us see which event types arrive.
       console.log('[ifood-sync] store=%s events=%s', storeId, events.map((e: any) => e.code ?? e.fullCode).join(','))
     }
-    const placed  = events.filter((e: any) => e.code === 'PLACED')
+    // iFood sends the short code (PLC) in `code` and the long one in `fullCode`.
+    const placed  = events.filter((e: any) => e.code === 'PLC' || e.fullCode === 'PLACED')
     let inserted  = 0
     const errors: string[] = []
     // iFood never redelivers an acknowledged event, so a PLACED event whose
