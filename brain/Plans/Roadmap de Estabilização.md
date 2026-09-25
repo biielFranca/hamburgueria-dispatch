@@ -179,7 +179,12 @@ Achados ao testar com a loja de teste do iFood (nenhum pedido iFood jamais tinha
 - Resultado: pedidos #9361 e #3924 entraram com endereço e coordenadas; classificados como `external_monitoring` (entrega do iFood).
 - **Pendente:** testar pedido com entrega própria (gera sugestão de rota). O polling do iFood só roda com a tela Configurações aberta (item 1.3).
 
-### 0.5.4 Revogar RPC pública das funções `SECURITY DEFINER` 🟠
+### 0.5.4 Revogar RPC pública das funções `SECURITY DEFINER` 🟠 — ✅ Concluído via abordagem B (26/set/2026)
+> **Feito:** migration `20260926c_move_internal_functions_to_private.sql`. 15 funções internas movidas para o schema `private` (não exposto por PostgREST/pg_graphql; sem `usage` para anon/authenticated). Nenhum `EXECUTE` foi revogado — é a recusa de EXECUTE que causa o segfault nesta instância. `trg_order_dispatch_deduct` ganhou `search_path = public, private, pg_temp` (chama 3 funções movidas).
+> **Verificado:** dono muda status de pedido para `dispatched` → trigger de auditoria grava evento (0 → 1) e trigger de baixa de estoque roda sem erro (rollback no fim). Advisor "SECURITY DEFINER executável pela API": 20 → 5.
+> **Restam em `public` (intencional):** `auth_role`, `auth_store_id`, `get_my_store_id`, `get_user_store_id` (usados pelas policies; só devolvem dados do próprio usuário) e `recompute_all_alert_levels` (chamada pela Edge Function `compute-alert-state`; idempotente; vai para `private` quando o cron do item 1.3 a chamar direto pelo banco).
+> **Pendente fora do escopo:** reportar o segfault ao suporte do Supabase; considerar atualizar a imagem do Postgres (`17.6.1.104`).
+
 > **Tentativa 1 (26/set) — revertida.** Migration `20260926_revoke_public_rpc_definer_functions.sql` aplicada; privilégios ficaram corretos, mas **chamar uma função sem EXECUTE derruba o Postgres inteiro** (`signal 11: Segmentation fault`, servidor reinicia). Reproduzido 2/2 (`set role anon; select public.check_user_login('x')` e `... recompute_all_alert_levels()`); com o EXECUTE devolvido a mesma chamada roda normal. Se a API pública provocar isso, qualquer visitante derruba o banco → revertido em `20260926b_rollback_revoke_public_rpc.sql`.
 > Suspeita (Inferred): bug da imagem do Postgres deste projeto (`17.6.1.104`; os outros projetos já estão em `17.6.1.166`).
 > **Próximo passo:** (A) atualizar a imagem do Postgres pelo dashboard e repetir o teste controlado; se continuar, (B) mover as 16 funções internas para um schema `private` não exposto pela API (recomendação do próprio Supabase) — a chamada nem chega ao banco. Reportar o segfault ao suporte do Supabase.
