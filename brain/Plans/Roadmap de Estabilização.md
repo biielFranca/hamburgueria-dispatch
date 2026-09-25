@@ -262,7 +262,7 @@ Maior impacto no custo e na correção. Os itens se sobrepõem no mesmo código,
 - **Como:** registrar a rota e o botão da sidebar só quando `import.meta.env.DEV`; import dinâmico para o Vite descartar o módulo no build.
 - **Pronto quando:** `npm run build` não contém o código da página.
 
-### 1.6 Alerta de pedido novo (som + notificação do Windows) — 🟡 Código pronto, falta ligar o Realtime (26/set/2026)
+### 1.6 Alerta de pedido novo (som + notificação do Windows) — 🟡 Pronto, falta testar com pedido real (26/set/2026)
 > **Feito (front):** `AlertSystem` trata `INSERT` em `orders` da loja: toca um som próprio `new_order` (carrilhão ascendente, sintetizado — distinto dos bipes de atraso), mostra um card verde fixo (plataforma, código, cliente) e dispara `notify()`. O som repete a cada 30 s (`NEW_ORDER_REPEAT_MS`) enquanto houver pedido não confirmado; para quando o operador clica no card ou na notificação, ou quando o pedido vira `dispatched`/`delivered`/`cancelled`. Respeita o mute (a notificação do Windows também sai sem som quando mutado). Vários pedidos juntos tocam uma vez só. Regras puras em `src/lib/newOrderAlert.ts` com testes (98 testes, `tsc` limpo).
 > **Janela de 2 min medida pela chegada no banco** (`updated_at` do INSERT), não pelo `created_at`: o iFood grava em `created_at` a hora em que o cliente pediu, então um pedido sincronizado com atraso (polling só roda com Configurações aberta até o 1.3) seria silenciado.
 > **Permissão de notificação (passo 4):** já é pedida quando o `AlertSystem` monta, ou seja, logo depois do login. Não precisou mudar.
