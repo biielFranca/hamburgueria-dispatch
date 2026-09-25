@@ -48,9 +48,12 @@ async function getEvents(token: string): Promise<any[]> {
   const res = await fetch(EVENTS_URL, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) return []
   const text = await res.text()
-  if (!text.trim()) return []   // iFood: empty body = no new events
+  // 204/empty body = no new events. Any other non-2xx is a real failure
+  // (e.g. merchant not linked to this app) and must surface in last_error
+  // instead of looking like "no orders".
+  if (!res.ok) throw new Error(`iFood events polling failed (${res.status}): ${text.slice(0, 300) || '(empty)'}`)
+  if (!text.trim()) return []
   try {
     const data = JSON.parse(text)
     return Array.isArray(data) ? data : []
@@ -176,10 +179,24 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const events  = await getEvents(token)
+    let events: any[]
+    try {
+      events = await getEvents(token)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      await sb.from('store_integrations').update({ last_error: msg }).eq('id', integration.id)
+      return reply({ ok: false, error: msg, inserted: 0, events: 0, errors: [msg] })
+    }
+    if (events.length) {
+      // Codes only (no customer data) — lets us see which event types arrive.
+      console.log('[ifood-sync] store=%s events=%s', storeId, events.map((e: any) => e.code ?? e.fullCode).join(','))
+    }
     const placed  = events.filter((e: any) => e.code === 'PLACED')
     let inserted  = 0
     const errors: string[] = []
+    // iFood never redelivers an acknowledged event, so a PLACED event whose
+    // order failed to persist must stay un-acked and come back next poll.
+    const failedEventIds = new Set<string>()
 
     for (const ev of placed) {
       try {
@@ -188,14 +205,17 @@ Deno.serve(async (req: Request) => {
         if (existing) continue
         const ifoodOrder = await getOrder(token, ev.orderId)
         const { error: ie } = await sb.from('orders').insert(normalize(ifoodOrder, storeId))
-        if (ie) errors.push(`${ev.orderId}: ${ie.message}`)
-        else inserted++
+        if (ie) {
+          errors.push(`${ev.orderId}: ${ie.message}`)
+          failedEventIds.add(ev.id)
+        } else inserted++
       } catch (e) {
         errors.push(`${ev.orderId}: ${e instanceof Error ? e.message : String(e)}`)
+        failedEventIds.add(ev.id)
       }
     }
 
-    await ackEvents(token, events.map((e: any) => e.id))
+    await ackEvents(token, events.filter((e: any) => !failedEventIds.has(e.id)).map((e: any) => e.id))
     await sb.from('store_integrations').update({
       last_sync_at: new Date().toISOString(),
       last_error:   errors.length ? errors.join('; ') : null,
