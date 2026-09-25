@@ -21,13 +21,14 @@ Análise do código na branch `claude/awesome-mccarthy-cjblse` (set/2026):
 | Fase | Objetivo | Esforço estimado | Bloqueia |
 |---|---|---|---|
 | **0 — Destravar** | Ter visibilidade e o código completo no repo | 0,5–1 dia | Tudo |
+| **0.5 — Segurança crítica** | Fechar as brechas achadas no levantamento | 0,5–1 dia | Tudo que vem depois |
 | **1 — Parar o consumo** | Egress e Edge sob controle; remover duplicação | 2–3 dias | Fase 2, produção |
 | **2 — Tela Operacional** | Updates incrementais + quebra do god component | 2–3 dias | — |
 | **3 — Integrações confiáveis** | Testes e estrutura das Edge Functions de pedido | 2 dias | Produção |
 | **4 — Pré-produção** | Plano, segredos, ensaio ponta a ponta | 1–2 dias | Primeiro turno real |
 | **5 — Manutenção contínua** | Dados por feature, tipos gerados, docs | incremental | — |
 
-Dependências: `0 → 1 → (2 ∥ 3) → 4 → 5`. Fases 2 e 3 podem correr em paralelo.
+Dependências: `0 → 0.5 → 1 → (2 ∥ 3) → 4 → 5`. Fases 2 e 3 podem correr em paralelo.
 
 Regra de ouro: **cada item vira um PR pequeno, com `tsc` e `vitest` passando e uma métrica antes/depois quando o item for de consumo.**
 
@@ -66,24 +67,87 @@ Sem isso não dá para medir nada nem mexer com segurança.
 - `pg_cron` e `pg_net` **não instalados** — não há cron consumindo Edge neste projeto.
 - Edge Functions deployadas: `ifood-sync` (agora versionada em `supabase/functions/ifood-sync`), `open-delivery-*` (3), `classify-orders`, `run-route-engine`, `compute-alert-state`, e `cardapio-web-native-webhook` / `cardapio-web-native-poll` (suporte removido do código em `7d7569f`, mas **ainda deployadas** — apagar).
 - `ifood-dispatch-confirm` **não existe** no deploy nem no histórico do git: a confirmação de despacho do iFood sempre falha.
-- **Conclusão Inferred:** com zero pedidos e integrações desligadas, este projeto dificilmente é o grande consumidor. No plano free, egress e invocações Edge são **cotas da organização**, somadas entre todos os projetos (Minhas Finanças com Open Finance, Fechamento de Caixa, etc.). Confirmar na tela *Usage* da org, por projeto, antes de atribuir o estouro ao Dispatch.
+- **Origem do estouro (confirmado pelo dono do projeto):** o estouro de egress/Edge foi deste projeto, meses atrás, e foi o motivo de ele ter sido pausado. Os dados de pedido e os logs daquela época não existem mais no banco, então não há como medir retroativamente — as causas continuam sendo as identificadas no código (polling por janela, processamento duplicado no cliente, `fetchAll()` por evento). A Fase 1 segue válida e necessária.
 
-**Achados de segurança (advisors + SQL) — tratar antes da Fase 1:**
+**Achados de segurança (advisors + SQL)** — plano de correção na **Fase 0.5**:
 
 | Severidade | Achado | Ação |
 |---|---|---|
-| 🔴 Crítico | Policy `integrations_all` em `store_integrations`: `ALL` para `public` com `using (true)`. Qualquer um com a anon key (que vai dentro do app) lê, altera e apaga integrações — incluindo `client_secret` e `access_token` do iFood | Dropar a policy; **rotacionar as credenciais do iFood** no portal |
-| 🔴 Crítico | `ifood-sync` sem autenticação (`verify_jwt = false`, sem checagem): qualquer um dispara sync de qualquer `storeId`; `testMode` funciona como proxy aberto de teste de credenciais | Item 1.4 |
-| 🟠 Alto | 20 funções `SECURITY DEFINER` executáveis por `anon` via RPC (`deduct_stock_for_item`, `enqueue_retry`, `recompute_*`, `check_user_login`…) | `revoke execute ... from anon, authenticated` nas que só o backend usa |
-| 🟠 Alto | Views `recent_errors` e `order_pipeline_latency` com `SECURITY DEFINER` (ignoram RLS) | Recriar com `security_invoker = on` |
-| 🟡 Médio | `idempotency_keys` e `retry_queue` com RLS sem policy (ok se só service role acessa — confirmar) | Documentar |
-| 🟡 Médio | 3 funções com `search_path` mutável; proteção contra senha vazada desligada | Fixar `search_path`; ligar no Auth |
+| 🔴 Crítico | Policy `integrations_all` em `store_integrations`: `ALL` para `public` com `using (true)`. Qualquer um com a anon key (que vai dentro do app) lê, altera e apaga integrações — incluindo `client_secret` e `access_token` do iFood | 0.5.1 e 0.5.2 |
+| 🔴 Crítico | `ifood-sync` sem autenticação (`verify_jwt = false`, sem checagem): qualquer um dispara sync de qualquer `storeId`; `testMode` funciona como proxy aberto de teste de credenciais | 0.5.3 |
+| 🟠 Alto | 20 funções `SECURITY DEFINER` executáveis por `anon` via RPC (`deduct_stock_for_item`, `enqueue_retry`, `recompute_*`, `check_user_login`…) | 0.5.4 |
+| 🟠 Alto | Views `recent_errors` e `order_pipeline_latency` com `SECURITY DEFINER` (ignoram RLS) | 0.5.5 |
+| 🟡 Médio | `idempotency_keys` e `retry_queue` com RLS sem policy (ok se só service role acessa — confirmar) | 0.5.6 |
+| 🟡 Médio | 3 funções com `search_path` mutável; proteção contra senha vazada desligada | 0.5.6 |
 | ⚪ Perf | 9 policies com `auth.*()` sem `(select ...)`; 20 grupos de policies permissivas duplicadas; 15 FKs sem índice | Consolidar policies na Fase 5 — irrelevante no volume atual |
 
 ### 0.4 CI mínimo
 - **Por quê:** 90 testes existem mas só rodam se alguém lembrar. As fases seguintes mexem em lógica central — sem CI, regressão passa.
 - **Como:** `.github/workflows/ci.yml` em `hamburgueria-dispatch/`: `npm ci` → `npx tsc --noEmit` → `npx vitest run`. Na Fase 3, adicionar `deno test` para `supabase/functions`.
 - **Pronto quando:** check verde obrigatório no PR.
+
+---
+
+## Fase 0.5 — Segurança crítica
+
+Vem antes de qualquer otimização: não adianta reduzir custo de um backend em que qualquer pessoa lê as credenciais da loja. Todos os itens são pequenos, reversíveis e **não mudam comportamento para o operador legítimo**.
+
+Regra: toda mudança de banco vira **migration versionada** em `supabase/migrations/` (nada aplicado só pelo dashboard), e depois de cada item os advisors são rodados de novo.
+
+### Conceito: o que é uma policy (RLS)
+O app fala direto com o banco usando a **anon key**, que vai embutida no executável — qualquer pessoa que baixe o app consegue extraí-la. O que impede essa pessoa de ler tudo é o **Row Level Security (RLS)**: cada tabela tem *policies*, regras que o Postgres avalia em cada consulta para decidir quais linhas aquele usuário pode ver ou alterar. Exemplo correto: "só pode ler integrações cuja `store_id` seja a loja do usuário logado".
+
+Policies se somam com **OU**: basta uma liberar para o acesso ser liberado. Por isso uma única policy permissiva anula todas as outras.
+
+### 0.5.1 Remover a policy `integrations_all` 🔴
+- **O que é o problema:** `store_integrations` tem as policies corretas (`integrations_owner_select`, `integrations_owner_manage`, restritas ao dono da loja) **e** uma policy `integrations_all` com `ALL` (ler, inserir, alterar, apagar) para o papel `public` (inclui visitante sem login) com condição `true` (sempre verdadeira). Como policies somam com OU, a tabela está, na prática, **aberta para o mundo**. Também não há bloqueio por coluna: `client_secret`, `access_token` e `webhook_secret` são legíveis pela anon key.
+- **Por quê:** é a brecha mais grave do sistema — expõe credenciais do iFood e permite apagar/trocar integrações de qualquer loja.
+- **Como:**
+  1. Migration `drop policy integrations_all on public.store_integrations;`.
+  2. Na mesma migration, bloquear as colunas secretas para o front: `revoke select (client_secret, access_token, webhook_secret, api_aberta_token, api_aberta_webhook_token) on public.store_integrations from anon, authenticated;`. Só as Edge Functions (service role) precisam delas.
+  3. Ajustar a tela de Conexões para **nunca ler** esses campos (só gravar ou mostrar "configurado ✓").
+  4. Auditar se existe o mesmo padrão em outras tabelas: `select tablename, policyname, cmd, roles from pg_policies where qual = 'true' or with_check = 'true';`. Tratar cada achado do mesmo jeito.
+- **Risco:** baixo. As policies do dono continuam. Testar: dono salva e ativa integração; operador não vê segredos; requisição com anon key sem login retorna vazio.
+- **Pronto quando:** `select` com anon key em `store_integrations` retorna 0 linhas; advisors sem achado nessa tabela.
+
+### 0.5.2 Rotacionar as credenciais do iFood 🔴 (ação do dono)
+- **Por quê:** o `client_secret` e o `access_token` ficaram expostos publicamente desde que a policy foi criada. Remover a policy não "desvaza" o que já pode ter sido lido.
+- **Como:**
+  1. No Portal do Desenvolvedor iFood, gerar novo `clientSecret` (invalida o antigo).
+  2. Limpar `access_token` e `token_expires_at` no banco.
+  3. Gravar o novo segredo **só depois** de 0.5.1 aplicada.
+- **Pronto quando:** credencial antiga revogada no portal.
+
+### 0.5.3 Autenticar `ifood-sync` e remover funções mortas 🔴
+- **Por quê:** a função roda com `verify_jwt = false` e não checa nada: qualquer pessoa na internet dispara sync de qualquer `storeId` (consome cota Edge e a API do iFood em nome da loja). O `testMode` recebe `clientId`/`clientSecret` e responde se são válidos — um testador de credenciais aberto. As funções `cardapio-web-native-*` continuam deployadas sem uso: superfície de ataque sem benefício.
+- **Como:**
+  1. Em `ifood-sync`, aceitar só dois chamadores: (a) usuário logado → `storeId` derivado do JWT via `_shared/requireStore.ts`, ignorando o body; (b) o cron da Fase 1.3 → header com segredo guardado em variável de ambiente da função. Qualquer outro → 401.
+  2. `testMode`: exigir usuário logado com papel de dono.
+  3. Apagar `cardapio-web-native-webhook` e `cardapio-web-native-poll` do projeto (`supabase functions delete`). O código continua no histórico do git (`f86f4e5`).
+  4. A parte de front (módulo único, `functions.invoke`) continua no item 1.4.
+- **Pronto quando:** chamada sem JWT/segredo → 401; lista de funções deployadas = lista em `supabase/functions/`.
+
+### 0.5.4 Revogar RPC pública das funções `SECURITY DEFINER` 🟠
+- **O que é o problema:** 20 funções do schema `public` rodam com privilégio do dono do banco (ignoram RLS) e ficam expostas como endpoint `/rest/v1/rpc/<nome>` para `anon` e `authenticated`. Ex.: qualquer visitante pode chamar `deduct_stock_for_item` (dar baixa em estoque de qualquer loja), `enqueue_retry`, `resolve_retry`, `recompute_*`, `check_user_login` (enumerar usuários).
+- **Levantamento:** o front **não chama nenhuma RPC**; as Edge Functions chamam só `recompute_all_alert_levels` e `pg_advisory_*` com service role.
+- **Como:**
+  1. Migration com `revoke execute on function ... from public, anon, authenticated;` para as funções de backend e de trigger (triggers disparam sem precisar de `EXECUTE`).
+  2. **Exceção:** helpers usados dentro das policies (`auth_store_id`, `auth_role`, `get_user_store_id`, `get_my_store_id`) precisam manter `EXECUTE` para `authenticated` — revogar só de `anon`.
+  3. Rodar os testes de RLS manualmente: login de operador e dono, listar pedidos, aceitar sugestão, despachar.
+- **Pronto quando:** advisors `anon_security_definer_function_executable` zerado; app funciona para operador e dono.
+
+### 0.5.5 Views sem `SECURITY DEFINER` 🟠
+- **Por quê:** `recent_errors` e `order_pipeline_latency` rodam com permissão do criador e ignoram RLS — um usuário de uma loja veria erros e latências de todas.
+- **Como:** `alter view public.recent_errors set (security_invoker = on);` (idem para a outra). Se forem só para diagnóstico, revogar `select` de `anon, authenticated`.
+- **Pronto quando:** advisor `security_definer_view` zerado.
+
+### 0.5.6 Ajustes menores 🟡
+- Fixar `search_path` em `trg_set_updated_at`, `update_updated_at`, `get_user_store_id` (`alter function ... set search_path = public, pg_temp;`).
+- Ligar *Leaked password protection* em Auth → Settings (dashboard).
+- `idempotency_keys` e `retry_queue`: RLS sem policy é o comportamento desejado (só service role acessa). Registrar a decisão em [[Decision Log]] para o advisor não virar ruído.
+
+### Critério de saída da Fase 0.5
+Advisors de segurança sem nenhum item ERROR/WARN, exceto os justificados por escrito; credencial do iFood rotacionada; teste manual de login + operação completa.
 
 ---
 
@@ -122,7 +186,7 @@ Maior impacto no custo e na correção. Os itens se sobrepõem no mesmo código,
 - **Por quê:** `src/lib/ifood.ts` e `src/lib/integrations/ifood.ts` duplicam responsabilidade; `startIfoodPolling` não é usado; `ifood.ts` chama a função com a **anon key como Bearer** e `storeId` no body — quem souber um `storeId` sincroniza loja alheia. As funções Open Delivery já derivam `storeId` do JWT (`_shared/requireStore.ts`); o iFood ficou para trás.
 - **Como:**
   1. Um só `src/lib/integrations/ifood.ts` usando `supabase.functions.invoke` (manda o JWT do usuário).
-  2. Nas funções `ifood-*`, usar `requireStore` e ignorar `storeId` do body (exceto na chamada do cron, autenticada pelo segredo).
+  2. A autenticação do lado do servidor já foi feita em 0.5.3.
   3. Apagar `src/lib/ifood.ts`, `startIfoodPolling` e o fallback `tauriFetch` se não for mais necessário.
 - **Pronto quando:** chamada sem JWT válido → 401; `storeId` sempre vem do servidor.
 
