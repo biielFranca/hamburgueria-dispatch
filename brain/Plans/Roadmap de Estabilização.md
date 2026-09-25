@@ -146,7 +146,11 @@ Policies se somam com **OU**: basta uma liberar para o acesso ser liberado. Por 
   4. A parte de front (módulo único, `functions.invoke`) continua no item 1.4.
 - **Pronto quando:** chamada sem JWT/segredo → 401; lista de funções deployadas = lista em `supabase/functions/`.
 
-### 0.5.3b Deploy desatualizado das demais Edge Functions 🔴
+### 0.5.3b Deploy desatualizado das demais Edge Functions 🔴 — 🟡 Deployado, aguardando teste HTTP (25/set/2026)
+> **Feito:** redeploy a partir do repo de `compute-alert-state` (v4), `classify-orders` (v4), `run-route-engine` (v4), `open-delivery-webhook` (v7), `open-delivery-sync` (v5), `open-delivery-dispatch-confirm` (v5). Todos empacotaram sem erro. `compute-alert-state` agora exige a chave service role (401 para qualquer outro).
+> **Bug achado no caminho:** o comentário `*/30 * * * * *` em `compute-alert-state/index.ts` fechava o bloco de comentário — o arquivo do repo **não compilava** (a versão em produção era outra). Corrigido. Todas as 9 fontes de `supabase/functions` passaram por checagem de sintaxe com o compilador TypeScript antes dos deploys.
+> **Pendente:** rodar `scripts/verify-edge-auth.ps1` na máquina do dono (este ambiente não alcança `supabase.co`).
+
 - **Achado (25/set/2026):** as correções de segurança do repo **nunca foram deployadas**. Datas do deploy × commits:
 
   | Função | Deploy em produção | Correção no repo |
