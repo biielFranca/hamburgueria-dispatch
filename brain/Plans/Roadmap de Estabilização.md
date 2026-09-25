@@ -81,8 +81,9 @@ Sem isso não dá para medir nada nem mexer com segurança.
 | 🟡 Médio | 3 funções com `search_path` mutável; proteção contra senha vazada desligada | 0.5.6 |
 | ⚪ Perf | 9 policies com `auth.*()` sem `(select ...)`; 20 grupos de policies permissivas duplicadas; 15 FKs sem índice | Consolidar policies na Fase 5 — irrelevante no volume atual |
 
-### 0.4 CI mínimo — 🟡 Workflow pronto, falta tornar obrigatório (26/set/2026)
-> `.github/workflows/ci.yml` na raiz do repo (o GitHub só lê de lá): em todo PR e push no `master`, `npm ci` → `tsc --noEmit` → `vitest run` dentro de `hamburgueria-dispatch/`. Não tinha sido feito porque a Fase 0.5 passou na frente. **Pendente (dono):** regra de proteção no `master` exigindo o check `typecheck + tests` (GitHub → Settings → Branches). A partir daqui, cada item vira PR para o `master`.
+### 0.4 CI mínimo — ✅ Concluído (26/set/2026)
+> `.github/workflows/ci.yml` na raiz do repo (o GitHub só lê de lá): em todo PR e push no `master`, `npm ci` → `tsc --noEmit` → `vitest run` dentro de `hamburgueria-dispatch/`. Primeira execução verde em 24 s no PR #2. Não tinha sido feito porque a Fase 0.5 passou na frente.
+> **Ruleset `master protegido` (ativo):** exige PR (0 aprovações — dev solo não aprova o próprio PR), check `typecheck + tests` verde, bloqueia force push e exclusão do `master`; sem bypass. A partir daqui, cada item vira PR para o `master`.
 - **Por quê:** 90 testes existem mas só rodam se alguém lembrar. As fases seguintes mexem em lógica central — sem CI, regressão passa.
 - **Como:** `.github/workflows/ci.yml` em `hamburgueria-dispatch/`: `npm ci` → `npx tsc --noEmit` → `npx vitest run`. Na Fase 3, adicionar `deno test` para `supabase/functions`.
 - **Pronto quando:** check verde obrigatório no PR.
