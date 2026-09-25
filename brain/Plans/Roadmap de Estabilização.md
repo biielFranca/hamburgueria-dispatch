@@ -180,6 +180,10 @@ Achados ao testar com a loja de teste do iFood (nenhum pedido iFood jamais tinha
 - **Pendente:** testar pedido com entrega própria (gera sugestão de rota). O polling do iFood só roda com a tela Configurações aberta (item 1.3).
 
 ### 0.5.4 Revogar RPC pública das funções `SECURITY DEFINER` 🟠
+> **Tentativa 1 (26/set) — revertida.** Migration `20260926_revoke_public_rpc_definer_functions.sql` aplicada; privilégios ficaram corretos, mas **chamar uma função sem EXECUTE derruba o Postgres inteiro** (`signal 11: Segmentation fault`, servidor reinicia). Reproduzido 2/2 (`set role anon; select public.check_user_login('x')` e `... recompute_all_alert_levels()`); com o EXECUTE devolvido a mesma chamada roda normal. Se a API pública provocar isso, qualquer visitante derruba o banco → revertido em `20260926b_rollback_revoke_public_rpc.sql`.
+> Suspeita (Inferred): bug da imagem do Postgres deste projeto (`17.6.1.104`; os outros projetos já estão em `17.6.1.166`).
+> **Próximo passo:** (A) atualizar a imagem do Postgres pelo dashboard e repetir o teste controlado; se continuar, (B) mover as 16 funções internas para um schema `private` não exposto pela API (recomendação do próprio Supabase) — a chamada nem chega ao banco. Reportar o segfault ao suporte do Supabase.
+
 - **O que é o problema:** 20 funções do schema `public` rodam com privilégio do dono do banco (ignoram RLS) e ficam expostas como endpoint `/rest/v1/rpc/<nome>` para `anon` e `authenticated`. Ex.: qualquer visitante pode chamar `deduct_stock_for_item` (dar baixa em estoque de qualquer loja), `enqueue_retry`, `resolve_retry`, `recompute_*`, `check_user_login` (enumerar usuários).
 - **Levantamento:** o front **não chama nenhuma RPC**; as Edge Functions chamam só `recompute_all_alert_levels` e `pg_advisory_*` com service role.
 - **Como:**
@@ -223,6 +227,8 @@ Maior impacto no custo e na correção. Os itens se sobrepõem no mesmo código,
   5. Apagar `ClassifierService`, `RouteEngineService`, as partes de I/O de `src/lib/classifier.ts` e `src/lib/routeEngine.ts`, e as flags `VITE_BACKEND_*`.
 - **Risco:** médio — é o coração do produto. Mitigação: testes de regra antes de apagar o front; ensaio com a página Dev.
 - **Pronto quando:** existe uma só implementação de cada regra, testada; nenhum processamento de domínio roda no cliente.
+
+> **Evidência (26/set):** o classificador do front mantém pedidos de retirada e de logística da plataforma em `status = 'normalized'` (a Edge Function usa `external_monitoring`). Como ele reprocessa todo `normalized` a cada 60 s, esses pedidos são reclassificados **para sempre**: 1 `update` por pedido por minuto por janela aberta (cada um gera evento Realtime → `fetchAll()` na tela Operacional) + um insert em `order_events` com `actor_type = 'system'` que a policy recusa (`new row violates row-level security policy`). Mais um motivo para a fonte única de regra.
 
 ### 1.3 Tirar o polling de integrações do cliente
 - **Por quê:** `IfoodPoller` e `OpenDeliveryPoller` chamam Edge a cada 30s **por janela e por plataforma** (até 6 chamadas/min/janela ≈ 8.600/dia). Com dev + tauri + reload do Vite duplicando intervals, estoura 500 mil/mês. E com o app fechado, pedido do iFood não entra.
