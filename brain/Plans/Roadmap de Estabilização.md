@@ -99,7 +99,15 @@ O app fala direto com o banco usando a **anon key**, que vai embutida no execut�
 
 Policies se somam com **OU**: basta uma liberar para o acesso ser liberado. Por isso uma única policy permissiva anula todas as outras.
 
-### 0.5.1 Remover a policy `integrations_all` 🔴
+### 0.5.1 Remover a policy `integrations_all` 🔴 — ✅ Concluído (25/set/2026)
+> **Executado:** migration `supabase/migrations/20260925_lock_store_integrations.sql`, aplicada no projeto.
+> **Verificado com SQL simulando cada papel:** visitante (anon) → leitura e escrita negadas; dono → lê as colunas seguras (3 linhas), **não** lê `client_secret`, consegue `update`/`insert`/`upsert` como a tela faz; operador → 0 linhas. Auditoria de policies `true`: nenhuma outra tabela tem esse padrão. Advisors: nenhum achado restante em `store_integrations`.
+> **Notas:**
+> - Não precisou mudar o front: as telas já selecionavam só colunas seguras e não enviam segredos.
+> - Não existe tela que grave `client_secret`. Até existir (via Edge Function, nunca direto do front), segredo novo é gravado pelo dashboard do Supabase.
+> - Risco a observar: `IfoodPoller` assina Realtime em `store_integrations`; com SELECT por coluna o Realtime pode recusar a assinatura. Impacto só no toggle ao vivo — o componente é substituído no item 1.3.
+> - Achado lateral: o histórico de migrations do banco não bate 1:1 com `supabase/migrations/` (ex.: `minimal_stores_and_users` existe só no banco; `20260417_encrypt_integration_secrets` só no repo). Reconciliar na Fase 5 com `supabase db pull`.
+
 - **O que é o problema:** `store_integrations` tem as policies corretas (`integrations_owner_select`, `integrations_owner_manage`, restritas ao dono da loja) **e** uma policy `integrations_all` com `ALL` (ler, inserir, alterar, apagar) para o papel `public` (inclui visitante sem login) com condição `true` (sempre verdadeira). Como policies somam com OU, a tabela está, na prática, **aberta para o mundo**. Também não há bloqueio por coluna: `client_secret`, `access_token` e `webhook_secret` são legíveis pela anon key.
 - **Por quê:** é a brecha mais grave do sistema — expõe credenciais do iFood e permite apagar/trocar integrações de qualquer loja.
 - **Como:**
