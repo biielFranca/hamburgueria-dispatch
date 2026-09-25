@@ -170,6 +170,15 @@ Policies se somam com **OU**: basta uma liberar para o acesso ser liberado. Por 
   5. Regra daqui pra frente: **mudança em `supabase/functions` só é considerada concluída depois do deploy + verificação** (vira passo do CI na Fase 0.4 quando possível).
 - **Pronto quando:** toda função deployada = versão do repo; testes HTTP negativos passando.
 
+### 0.5.3c Primeiro pedido iFood ponta a ponta ✅ (25/set/2026)
+Achados ao testar com a loja de teste do iFood (nenhum pedido iFood jamais tinha entrado):
+- App do portal era **distribuído** (não aceita `client_credentials`); trocado por app **centralizado**. Secret colado duas vezes (198 chars) — corrigido.
+- `ifood-sync` filtrava `code === 'PLACED'`, mas o iFood manda `code: 'PLC'` / `fullCode: 'PLACED'` → todo pedido era descartado. Corrigido (v13).
+- Eventos eram confirmados (ack) mesmo quando o pedido falhava ao gravar → pedido perdido para sempre. Agora só confirma o que foi processado.
+- Erro HTTP do `events:polling` era engolido como "sem pedidos". Agora vai para `last_error`.
+- Resultado: pedidos #9361 e #3924 entraram com endereço e coordenadas; classificados como `external_monitoring` (entrega do iFood).
+- **Pendente:** testar pedido com entrega própria (gera sugestão de rota). O polling do iFood só roda com a tela Configurações aberta (item 1.3).
+
 ### 0.5.4 Revogar RPC pública das funções `SECURITY DEFINER` 🟠
 - **O que é o problema:** 20 funções do schema `public` rodam com privilégio do dono do banco (ignoram RLS) e ficam expostas como endpoint `/rest/v1/rpc/<nome>` para `anon` e `authenticated`. Ex.: qualquer visitante pode chamar `deduct_stock_for_item` (dar baixa em estoque de qualquer loja), `enqueue_retry`, `resolve_retry`, `recompute_*`, `check_user_login` (enumerar usuários).
 - **Levantamento:** o front **não chama nenhuma RPC**; as Edge Functions chamam só `recompute_all_alert_levels` e `pg_advisory_*` com service role.
