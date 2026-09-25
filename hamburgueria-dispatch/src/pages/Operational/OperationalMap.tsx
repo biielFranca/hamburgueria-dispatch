@@ -204,8 +204,13 @@ export default function OperationalMap({
       zoomControl={true}
     >
       {MAPTILER_KEY ? (
+        // streets-v2-dark keeps street names prominent (dataviz-dark was too
+        // muted for drivers' addresses). 512px @2x tiles at zoomOffset -1
+        // keep the same scale with sharper labels.
         <TileLayer
-          url={`https://api.maptiler.com/maps/dataviz-dark/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`}
+          url={`https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}@2x.png?key=${MAPTILER_KEY}`}
+          tileSize={512}
+          zoomOffset={-1}
           attribution='&copy; <a href="https://www.maptiler.com/copyright/" target="_blank">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a>'
           maxZoom={19}
         />
