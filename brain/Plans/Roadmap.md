@@ -1,6 +1,8 @@
 # Roadmap
 
 ## Resumo
+> **Atualização set/2026:** as seções v2 abaixo estão parcialmente desatualizadas (service key já saiu do front, testes já existem, IfoodPoller já reage ao toggle). O plano vigente é [[Roadmap de Estabilização]].
+
 Plano de execução do Hamburgueria Dispatch. v1 entregue e concluída. Prioridades da v2 baseadas nas dívidas técnicas e funcionalidades faltantes conhecidas.
 
 ## Fonte

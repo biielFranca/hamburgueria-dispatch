@@ -1,4 +1,5 @@
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
+import { supabase } from './supabase'
 
 export interface IfoodSyncResult {
   inserted: number
@@ -14,12 +15,17 @@ const httpFetch: typeof globalThis.fetch =
   (window as any).__TAURI_INTERNALS__ ? (tauriFetch as any) : globalThis.fetch
 
 async function callFn(payload: object): Promise<Record<string, any>> {
+  // ifood-sync derives the store from the user's JWT — the anon key alone
+  // is rejected with 401.
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Sessão expirada — faça login novamente')
+
   const res = await httpFetch(FN_URL, {
     method:  'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey:         ANON,
-      Authorization:  `Bearer ${ANON}`,
+      Authorization:  `Bearer ${session.access_token}`,
     },
     body: JSON.stringify(payload),
   })

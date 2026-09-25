@@ -4,6 +4,8 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Order, Store } from '../../types'
 
+const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY as string | undefined
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 export const DISPATCH_GHOST_MS = 60_000
@@ -201,12 +203,28 @@ export default function OperationalMap({
       style={{ height: '100%', width: '100%', background: '#0f0f0f' }}
       zoomControl={true}
     >
-      <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a> &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>'
-        subdomains="abcd"
-        maxZoom={20}
-      />
+      {MAPTILER_KEY ? (
+        // streets-v2-dark keeps street names prominent (dataviz-dark was too
+        // muted for drivers' addresses). 512px @2x tiles at zoomOffset -1
+        // keep the same scale with sharper labels.
+        <TileLayer
+          url={`https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}@2x.png?key=${MAPTILER_KEY}`}
+          tileSize={512}
+          zoomOffset={-1}
+          attribution='&copy; <a href="https://www.maptiler.com/copyright/" target="_blank">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a>'
+          maxZoom={19}
+        />
+      ) : (
+        // Fallback without a key: light OSM tiles darkened by the
+        // .tiles-osm-dark CSS filter. OSM's usage policy does not allow heavy
+        // commercial use, so production needs VITE_MAPTILER_KEY.
+        <TileLayer
+          className="tiles-osm-dark"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a>'
+          maxZoom={19}
+        />
+      )}
 
       {routeCoords.length >= 2 && (
         <Polyline

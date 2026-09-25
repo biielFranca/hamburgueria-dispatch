@@ -8,16 +8,19 @@
  *   alert-5min.mp3    — light tone (warning)
  *   alert-1min.mp3    — medium urgent tone
  *   alert-critical.mp3 — strong critical tone
+ *   new-order.mp3     — chime for a newly received order
  *
  * Falls back to Web Audio API synthesis if files are not found (404).
  */
 
 export type AlertLevel = '5min' | '1min' | 'critical'
+export type AlertSound = AlertLevel | 'new_order'
 
-const SOUND_FILES: Record<AlertLevel, string> = {
-  '5min':     '/sounds/alert-5min.mp3',
-  '1min':     '/sounds/alert-1min.mp3',
-  'critical': '/sounds/alert-critical.mp3',
+const SOUND_FILES: Record<AlertSound, string> = {
+  '5min':      '/sounds/alert-5min.mp3',
+  '1min':      '/sounds/alert-1min.mp3',
+  'critical':  '/sounds/alert-critical.mp3',
+  'new_order': '/sounds/new-order.mp3',
 }
 
 const MUTE_KEY = 'dispatch_alert_muted'
@@ -42,7 +45,7 @@ export function toggleMute(): boolean {
 // ── Playback queue ────────────────────────────────────────────────────────────
 
 let playing = false
-const queue: AlertLevel[] = []
+const queue: AlertSound[] = []
 
 function dequeue() {
   if (playing || queue.length === 0) return
@@ -54,7 +57,7 @@ function dequeue() {
   })
 }
 
-async function playImmediate(level: AlertLevel): Promise<void> {
+async function playImmediate(level: AlertSound): Promise<void> {
   // Try file first
   try {
     const audio = new Audio(SOUND_FILES[level])
@@ -84,14 +87,14 @@ function getAudioContext(): AudioContext | null {
   return sharedCtx
 }
 
-function playFallback(level: AlertLevel) {
+function playFallback(level: AlertSound) {
   try {
     const ctx = getAudioContext()
     if (!ctx) return
 
     // Each level: array of { freq, vol, dur } pulses played in sequence
     // Minimum total duration: 5min ≥ 3s, 1min ≥ 4s, critical ≥ 5s
-    const PATTERNS: Record<AlertLevel, { freq: number; vol: number; dur: number; gap: number }[]> = {
+    const PATTERNS: Record<AlertSound, { freq: number; vol: number; dur: number; gap: number }[]> = {
       '5min': [
         // 3 moderate double-beeps, total ≈ 3.6s
         { freq: 520, vol: 0.30, dur: 0.35, gap: 0.15 },
@@ -127,10 +130,21 @@ function playFallback(level: AlertLevel) {
         { freq: 900, vol: 0.75, dur: 0.20, gap: 0.08 },
         { freq: 680, vol: 0.75, dur: 0.20, gap: 0 },
       ],
+      'new_order': [
+        // Ascending three-note chime played twice, total ≈ 2.6s — melodic so it
+        // is never confused with the delay beeps above
+        { freq: 784,  vol: 0.45, dur: 0.22, gap: 0.06 },
+        { freq: 988,  vol: 0.45, dur: 0.22, gap: 0.06 },
+        { freq: 1175, vol: 0.50, dur: 0.45, gap: 0.40 },
+        { freq: 784,  vol: 0.45, dur: 0.22, gap: 0.06 },
+        { freq: 988,  vol: 0.45, dur: 0.22, gap: 0.06 },
+        { freq: 1175, vol: 0.50, dur: 0.45, gap: 0 },
+      ],
     }
 
     const pulses = PATTERNS[level]
-    const oscType: OscillatorType = level === 'critical' ? 'square' : 'sine'
+    const oscType: OscillatorType =
+      level === 'critical' ? 'square' : level === 'new_order' ? 'triangle' : 'sine'
     let t = ctx.currentTime + 0.05
 
     for (const { freq, vol, dur, gap } of pulses) {
@@ -157,8 +171,10 @@ function playFallback(level: AlertLevel) {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function playAlert(level: AlertLevel): void {
+export function playAlert(level: AlertSound): void {
   if (isMuted()) return
+  // Several orders arriving together should chime once, not once per order
+  if (level === 'new_order' && queue.includes('new_order')) return
   queue.push(level)
   dequeue()
 }
