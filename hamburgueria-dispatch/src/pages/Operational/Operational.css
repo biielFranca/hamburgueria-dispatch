@@ -168,7 +168,7 @@
 
 /* Dark theme on light OSM tiles: invert lightness, rotate hues back so
    water/parks keep their colors, then soften contrast and saturation. */
-.op-map .leaflet-tile {
+.op-map .tiles-osm-dark .leaflet-tile {
   filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.5) !important;
 }
 

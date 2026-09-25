@@ -4,6 +4,8 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Order, Store } from '../../types'
 
+const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY as string | undefined
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 export const DISPATCH_GHOST_MS = 60_000
@@ -201,13 +203,23 @@ export default function OperationalMap({
       style={{ height: '100%', width: '100%', background: '#0f0f0f' }}
       zoomControl={true}
     >
-      <TileLayer
-        // CARTO basemaps now require an API key; OSM tiles need none and the
-        // .op-map .leaflet-tile CSS filter already tints them to the dark theme.
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a>'
-        maxZoom={19}
-      />
+      {MAPTILER_KEY ? (
+        <TileLayer
+          url={`https://api.maptiler.com/maps/dataviz-dark/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`}
+          attribution='&copy; <a href="https://www.maptiler.com/copyright/" target="_blank">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a>'
+          maxZoom={19}
+        />
+      ) : (
+        // Fallback without a key: light OSM tiles darkened by the
+        // .tiles-osm-dark CSS filter. OSM's usage policy does not allow heavy
+        // commercial use, so production needs VITE_MAPTILER_KEY.
+        <TileLayer
+          className="tiles-osm-dark"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a>'
+          maxZoom={19}
+        />
+      )}
 
       {routeCoords.length >= 2 && (
         <Polyline
