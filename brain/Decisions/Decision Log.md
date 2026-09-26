@@ -330,6 +330,31 @@ Edge Function `ifood-webhook` recebe os eventos (assinatura HMAC-SHA256 com o `c
 
 ---
 
+## Decisão 015
+### Título
+99Food pelo protocolo próprio (webhook), não por Open Delivery
+
+### Status
+Aceita (26/set/2026)
+
+### Contexto
+O código tratava a 99Food como plataforma Open Delivery (igual ao Keeta). A documentação da 99 oferece dois protocolos: o "99Food Protocol" (recomendado, com webhook e mais recursos) e uma camada Open Delivery que, na implementação deles, é **só polling** e sem evolução frequente. Seguir por Open Delivery reintroduziria o polling que a Decisão 014 tirou do iFood.
+
+### Decisão
+Edge Function `food99-webhook` recebe os eventos do protocolo próprio. Assinatura `didi-header-sign` = MD5(corpo bruto + app_secret). IDs de 64 bits lidos como texto. A loja continua confirmando pedidos no app da 99 (modo "B-App & OpenAPI"). Keeta segue em Open Delivery.
+
+### Consequências
+- ✅ Pedido da 99 em tempo real, sem polling
+- ✅ Receber pedidos não exige `auth_token` (o `orderNew` traz o pedido inteiro)
+- ❌ Assinatura MD5 é mais fraca que o HMAC-SHA256 do iFood — é o que a 99 oferece
+- ❌ Confirmação de despacho de entrega própria precisa ser reescrita no protocolo da 99 (com `auth_token` por loja)
+- ❌ A 99 cancela pedido não confirmado em 5 min: a confirmação continua dependendo do app da 99 na loja
+
+### Fonte
+`supabase/functions/food99-webhook/`, `supabase/functions/_shared/food99.ts`, [99Food Open Platform](https://developer-food.99app.com/pt-BR/openapi)
+
+---
+
 ## Notas Relacionadas
 - [[Visão Geral do Projeto]]
 - [[Sistema de Autenticação]]
