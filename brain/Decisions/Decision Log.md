@@ -303,6 +303,32 @@ Job `pg_cron` `close-stale-orders` (minuto 15 de cada hora) chama `private.close
 
 ---
 
+## Decisão 014
+### Título
+Pedidos do iFood por webhook, não por polling
+
+### Status
+Aceita (26/set/2026)
+
+### Contexto
+O roadmap 1.3 previa `pg_cron` + `pg_net` chamando `ifood-sync` a cada 30 s porque a API do iFood "exigia polling". A documentação atual oferece webhook para apps centralizados. Além disso, no polling a loja só fica aberta no iFood enquanto a integração consulta a cada 30 s — com o polling preso à tela Configurações, a loja ficava fechada no iFood no resto do tempo.
+
+### Decisão
+Edge Function `ifood-webhook` recebe os eventos (assinatura HMAC-SHA256 com o `client_secret`) e responde o `KEEPALIVE` de presença. `ifood-sync` fica só como reconciliação manual ("sincronizar agora"). O polling do front sai quando o webhook estiver cadastrado no portal.
+
+### Consequências
+- ✅ Pedido entra em tempo real, com o app fechado
+- ✅ Loja aberta no iFood não depende de tela aberta; desativar a integração (`active = false`) faz o webhook responder 401 → loja fica offline no iFood
+- ✅ Sem `pg_net`, sem chave service role no Vault, sem cron para o iFood
+- ❌ Custo parecido com o cron (~2.880 KEEPALIVE/dia); o ganho é latência e presença, não preço
+- ❌ Evento que falhar por 15 min é descartado pelo iFood — reconciliação pelo botão manual
+- ❌ Loja aparece aberta no iFood mesmo com o app fechado — controle por loja (modo "por merchant" do KEEPALIVE) fica para depois
+
+### Fonte
+`supabase/functions/ifood-webhook/`, `supabase/functions/_shared/ifood.ts`, [iFood Developer — Webhook](https://developer.ifood.com.br/pt-BR/docs/food/guides/modules/events/webhook-overview)
+
+---
+
 ## Notas Relacionadas
 - [[Visão Geral do Projeto]]
 - [[Sistema de Autenticação]]

@@ -3,6 +3,9 @@ project_id = "cuvhtdtkuwewslozddfw"
 [functions.ifood-sync]
 verify_jwt = false
 
+[functions.ifood-webhook]
+verify_jwt = false
+
 [functions.open-delivery-sync]
 verify_jwt = false
 
