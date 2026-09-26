@@ -99,6 +99,19 @@ export function keetaAction(ev: KeetaEvent): KeetaAction {
   }
 }
 
+/**
+ * Body for POST /v1/orders/{id}/confirm. Keeta cancels orders not confirmed
+ * within 5 minutes (and may close the store), so orders are auto-accepted
+ * (Decision 016). orderExternalCode = our orders.id.
+ */
+export function keetaConfirmBody(ourOrderId: string, now = new Date()) {
+  return {
+    createdAt:         now.toISOString(),
+    orderExternalCode: ourOrderId,
+    reason:            'Aceite automático (hamburgueria-dispatch)',
+  }
+}
+
 const isEncrypted = (v: unknown): v is string => typeof v === 'string' && v.startsWith('ENC_')
 
 /** Personal data Keeta returns as `ENC_…` ciphertext (BatchDecrypt docs). */

@@ -373,7 +373,7 @@ Função dedicada `keeta-webhook`, no mesmo formato de `ifood-webhook` e `food99
 - ✅ Nenhum dado pessoal em log
 - ❌ A doc do Keeta não fixa a URL assinada; a função testa as variantes plausíveis até o primeiro pedido real confirmar qual é
 - ❌ Pedido com entrega do Keeta chega sem telefone/complemento (o Keeta não descriptografa nesse caso) — a loja não precisa deles
-- ❌ Confirmação obrigatória em 5 min ainda não implementada (decisão pendente)
+- **Aceite automático (26/set, decisão do dono):** o Keeta cancela pedido não confirmado em 5 min e pode fechar a loja; a função confirma todo pedido novo assim que o grava. A loja não recusa pedidos do Keeta pelo sistema — disponibilidade e pausa são controladas no próprio Keeta.
 
 ### Fonte
 `supabase/functions/keeta-webhook/`, `supabase/functions/_shared/keeta.ts`, [Keeta Open Delivery API](https://api-docs.mykeeta.com/apis/opendelivery/orderswebhook)

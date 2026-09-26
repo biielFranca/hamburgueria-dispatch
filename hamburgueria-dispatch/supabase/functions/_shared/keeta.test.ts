@@ -2,8 +2,19 @@ import { describe, it, expect } from 'vitest'
 import { createHmac } from 'node:crypto'
 import {
   canonicalJson, keetaSignatureString, keetaSign, verifyKeetaSignature,
-  keetaAction, encryptedFields, isKeetaOwnDelivery, normalizeKeetaOrder,
+  keetaAction, encryptedFields, isKeetaOwnDelivery, normalizeKeetaOrder, keetaConfirmBody,
 } from './keeta'
+
+describe('keetaConfirmBody', () => {
+  it('sends the required fields with our order id as external code', () => {
+    const now = new Date('2026-09-26T15:00:10Z')
+    expect(keetaConfirmBody('our-uuid', now)).toEqual({
+      createdAt:         '2026-09-26T15:00:10.000Z',
+      orderExternalCode: 'our-uuid',
+      reason:            'Aceite automático (hamburgueria-dispatch)',
+    })
+  })
+})
 
 const SECRET = 'client-secret'
 const hmac64 = (s: string) => createHmac('sha256', SECRET).update(s).digest('base64')

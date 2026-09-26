@@ -11,13 +11,15 @@
 //  - personal data comes as ENC_ ciphertext; Keeta decrypts it only for
 //    orders the store delivers itself
 //  - answer 204; anything else → Keeta resends
+//  - Keeta cancels orders not confirmed within 5 min (and may close the
+//    store), so every new order is confirmed right away (Decision 016)
 //
 // Credentials live in store_integrations (platform 'keeta'): client_id,
 // client_secret; merchant_id = X-App-MerchantId (learned on the first event).
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  type KeetaEvent, canonicalJson, encryptedFields, isKeetaOwnDelivery, keetaAction, keetaSign,
+  type KeetaEvent, canonicalJson, encryptedFields, isKeetaOwnDelivery, keetaAction, keetaConfirmBody, keetaSign,
   keetaSignatureString, normalizeKeetaOrder, verifyKeetaSignature,
 } from '../_shared/keeta.ts'
 
@@ -89,7 +91,8 @@ async function keetaFetch(integration: KeetaIntegration, token: string, url: str
   const res = await fetch(url, { method: payload ? 'POST' : 'GET', headers, body: payload || undefined })
   const text = await res.text()
   if (!res.ok) throw new Error(`${u.pathname} failed (${res.status}): ${text.slice(0, 200) || '(empty)'}`)
-  return JSON.parse(text)
+  // confirm answers 202 with no body
+  return text.trim() ? JSON.parse(text) : null
 }
 
 async function decryptAll(integration: KeetaIntegration, token: string, root: string, ciphers: string[]) {
@@ -110,28 +113,51 @@ async function applyEvent(sb: SupabaseClient, integration: KeetaIntegration, ev:
   const storeId = integration.store_id
 
   if (action === 'new') {
-    const { data: existing } = await sb.from('orders')
-      .select('id')
+    if (!ev.orderURL) throw new Error(`CREATED ${ev.orderId} without orderURL`)
+    const root = apiRoot(ev.orderURL)
+
+    let { data: existing } = await sb.from('orders')
+      .select('id, status')
       .eq('store_id', storeId).eq('platform', 'keeta').eq('platform_order_id', ev.orderId)
       .maybeSingle()
-    if (existing) return 'duplicate'
-    if (!ev.orderURL) throw new Error(`CREATED ${ev.orderId} without orderURL`)
+    let result = 'duplicate'
 
-    const root  = apiRoot(ev.orderURL)
-    const token = await getToken(sb, integration, root)
-    const order = await keetaFetch(integration, token, ev.orderURL)
-    // Only own-delivery orders can be decrypted; platform ones keep those fields empty
-    const plain = isKeetaOwnDelivery(order) ? await decryptAll(integration, token, root, encryptedFields(order)) : {}
-    const row   = normalizeKeetaOrder(order, storeId, plain)
+    if (!existing) {
+      const token = await getToken(sb, integration, root)
+      const order = await keetaFetch(integration, token, ev.orderURL)
+      // Only own-delivery orders can be decrypted; platform ones keep those fields empty
+      const plain = isKeetaOwnDelivery(order) ? await decryptAll(integration, token, root, encryptedFields(order)) : {}
+      const row   = normalizeKeetaOrder(order, storeId, plain)
 
-    const { data: parked } = await sb.from('idempotency_keys')
-      .select('result').eq('key', parkedKey(ev.orderId)).maybeSingle()
-    if (parked?.result?.status) row.status = parked.result.status
+      const { data: parked } = await sb.from('idempotency_keys')
+        .select('result').eq('key', parkedKey(ev.orderId)).maybeSingle()
+      if (parked?.result?.status) row.status = parked.result.status
 
-    const { error } = await sb.from('orders').insert(row)
-    if (error?.code === '23505') return 'duplicate'
-    if (error) throw new Error(`insert ${ev.orderId}: ${error.message}`)
-    return 'inserted'
+      const { data: inserted, error } = await sb.from('orders').insert(row).select('id, status').single()
+      if (error?.code === '23505') {
+        // Same CREATED processed concurrently (Keeta retry) — the other run confirms
+        return 'duplicate'
+      }
+      if (error) throw new Error(`insert ${ev.orderId}: ${error.message}`)
+      existing = inserted
+      result = 'inserted'
+    }
+
+    // Auto-accept (Decision 016). A failed confirm throws → 500 → Keeta resends
+    // CREATED → the order exists, so only the confirm is retried.
+    if (existing.status !== 'cancelled' && existing.status !== 'delivered') {
+      const confirmedKey = `keeta-confirmed:${ev.orderId}`
+      const { data: done } = await sb.from('idempotency_keys').select('key').eq('key', confirmedKey).maybeSingle()
+      if (!done) {
+        const token = await getToken(sb, integration, root)
+        await keetaFetch(integration, token, `${root}/v1/orders/${encodeURIComponent(ev.orderId)}/confirm`, keetaConfirmBody(existing.id))
+        await sb.from('idempotency_keys').upsert({
+          key: confirmedKey, store_id: storeId, fn_name: 'keeta-events', result: { confirmed: true },
+        })
+        result += '+confirmed'
+      }
+    }
+    return result
   }
 
   const { data, error } = await sb.from('orders')
