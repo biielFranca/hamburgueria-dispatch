@@ -7,7 +7,6 @@ import { useAuth } from '../../components/auth/AuthBootstrap'
 import { syncIfood } from '../../lib/ifood'
 import { pollOpenDeliveryEvents } from '../../lib/integrations/openDelivery'
 import { fetchAddressByCep } from '../../lib/cep'
-import IfoodPoller from '../../components/IfoodPoller'
 import OpenDeliveryPoller from '../../components/OpenDeliveryPoller'
 import type { Store } from '../../types'
 import './Settings.css'
@@ -586,7 +585,6 @@ function TabConnections({ storeId }: { storeId: string }) {
           )
         })}
       </div>
-      <IfoodPoller />
       <OpenDeliveryPoller />
     </div>
   )
