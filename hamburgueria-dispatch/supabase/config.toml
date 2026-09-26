@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.ifood-webhook]
 verify_jwt = false
 
+[functions.food99-webhook]
+verify_jwt = false
+
 [functions.open-delivery-sync]
 verify_jwt = false
 

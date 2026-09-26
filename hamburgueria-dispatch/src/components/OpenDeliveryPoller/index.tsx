@@ -7,7 +7,8 @@ const POLL_INTERVAL_MS = 30_000
 
 import { PLATFORM_COLORS, PLATFORM_LABELS } from '../../lib/platformConfig'
 
-const OD_PLATFORMS = ['keeta', '99food'] as const
+// 99Food arrives by webhook (food99-webhook); its Open Delivery layer is polling-only
+const OD_PLATFORMS = ['keeta'] as const
 type OdPlatform = typeof OD_PLATFORMS[number]
 
 interface PlatformStatus {

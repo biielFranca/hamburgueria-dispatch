@@ -49,7 +49,7 @@ const PLATFORM_DEFS = [
     key: '99food',
     label: '99Food',
     color: '#F5A623',
-    description: 'Recebe pedidos via Open Delivery com suporte a logística própria.',
+    description: 'Recebe pedidos em tempo real via webhook da 99Food, com suporte a logística própria.',
     disabled: false,
   },
 ]
@@ -141,8 +141,11 @@ function IntegrationCard({
       if (def.key === 'ifood') {
         const result = await syncIfood(storeId)
         setTestResult(`✓ Sync ok — ${result.events} evento(s), ${result.inserted} inserido(s)`)
+      } else if (def.key === '99food') {
+        // No pull API on this path: orders are pushed to food99-webhook
+        setTestResult('A 99Food envia os pedidos por webhook. Faça um pedido de teste para conferir.')
       } else {
-        await pollOpenDeliveryEvents(def.key as '99food' | 'keeta', storeId, clientId.trim())
+        await pollOpenDeliveryEvents('keeta', storeId, clientId.trim())
         setTestResult(`✓ Conexão ok — ${def.label} respondeu com sucesso`)
       }
     } catch (e) {
