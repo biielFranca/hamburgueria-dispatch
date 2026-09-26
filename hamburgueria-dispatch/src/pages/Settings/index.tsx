@@ -5,9 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/auth/AuthBootstrap'
 import { syncIfood } from '../../lib/ifood'
-import { pollOpenDeliveryEvents } from '../../lib/integrations/openDelivery'
 import { fetchAddressByCep } from '../../lib/cep'
-import OpenDeliveryPoller from '../../components/OpenDeliveryPoller'
 import type { Store } from '../../types'
 import './Settings.css'
 
@@ -42,7 +40,7 @@ const PLATFORM_DEFS = [
     key: 'keeta',
     label: 'Keeta',
     color: '#27AE60',
-    description: 'Recebe pedidos via Open Delivery. Logistics sempre gerenciada pela Keeta.',
+    description: 'Recebe pedidos em tempo real via webhook Open Delivery do Keeta.',
     disabled: false,
   },
   {
@@ -141,12 +139,9 @@ function IntegrationCard({
       if (def.key === 'ifood') {
         const result = await syncIfood(storeId)
         setTestResult(`✓ Sync ok — ${result.events} evento(s), ${result.inserted} inserido(s)`)
-      } else if (def.key === '99food') {
-        // No pull API on this path: orders are pushed to food99-webhook
-        setTestResult('A 99Food envia os pedidos por webhook. Faça um pedido de teste para conferir.')
       } else {
-        await pollOpenDeliveryEvents('keeta', storeId, clientId.trim())
-        setTestResult(`✓ Conexão ok — ${def.label} respondeu com sucesso`)
+        // 99Food and Keeta push orders to food99-webhook / keeta-webhook
+        setTestResult(`A ${def.label} envia os pedidos por webhook. Faça um pedido de teste para conferir.`)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -588,7 +583,6 @@ function TabConnections({ storeId }: { storeId: string }) {
           )
         })}
       </div>
-      <OpenDeliveryPoller />
     </div>
   )
 }

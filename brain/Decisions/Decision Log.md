@@ -355,6 +355,31 @@ Edge Function `food99-webhook` recebe os eventos do protocolo próprio. Assinatu
 
 ---
 
+## Decisão 016
+### Título
+Keeta por webhook Open Delivery com função dedicada (`keeta-webhook`)
+
+### Status
+Aceita (26/set/2026)
+
+### Contexto
+O Keeta implementa o webhook do padrão Open Delivery, mas o `open-delivery-webhook` genérico do projeto não seguia o padrão (identificação da loja pela URL, cabeçalho e formato de assinatura errados, resposta 200 para assinatura inválida) e gravava o corpo de cada evento no log, com dados do cliente.
+
+### Decisão
+Função dedicada `keeta-webhook`, no mesmo formato de `ifood-webhook` e `food99-webhook`: assinatura validada antes de tudo, loja pelo `X-App-MerchantId`, pedido buscado pela `orderURL` com requisição assinada, campos `ENC_` descriptografados só em entrega própria e nunca gravados cifrados, nada de dados do cliente no log. O `open-delivery-webhook` e o polling do front (`OpenDeliveryPoller`) saem.
+
+### Consequências
+- ✅ As três plataformas entram por webhook; nenhum polling no app
+- ✅ Nenhum dado pessoal em log
+- ❌ A doc do Keeta não fixa a URL assinada; a função testa as variantes plausíveis até o primeiro pedido real confirmar qual é
+- ❌ Pedido com entrega do Keeta chega sem telefone/complemento (o Keeta não descriptografa nesse caso) — a loja não precisa deles
+- **Aceite automático (26/set, decisão do dono):** o Keeta cancela pedido não confirmado em 5 min e pode fechar a loja; a função confirma todo pedido novo assim que o grava. A loja não recusa pedidos do Keeta pelo sistema — disponibilidade e pausa são controladas no próprio Keeta.
+
+### Fonte
+`supabase/functions/keeta-webhook/`, `supabase/functions/_shared/keeta.ts`, [Keeta Open Delivery API](https://api-docs.mykeeta.com/apis/opendelivery/orderswebhook)
+
+---
+
 ## Notas Relacionadas
 - [[Visão Geral do Projeto]]
 - [[Sistema de Autenticação]]
