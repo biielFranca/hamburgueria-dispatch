@@ -24,7 +24,7 @@ Check "open-delivery-sync sem token"    "$base/open-delivery-sync"             '
 Check "dispatch-confirm sem token"      "$base/open-delivery-dispatch-confirm" '{"platform":"keeta","platformOrderId":"x"}'   "401" $null
 Check "classify-orders sem token"       "$base/classify-orders"                '{}'                                           "401" $null
 Check "run-route-engine sem token"      "$base/run-route-engine"               '{}'                                           "401" $null
-Check "compute-alert-state sem service" "$base/compute-alert-state"            '{}'                                           "401" $null
+Check "ifood-webhook sem assinatura"    "$base/ifood-webhook"                  '{"code":"KEEPALIVE"}'                         "401" $null
 # Versão antiga aceitava webhook sem assinatura e respondia "ok":true.
 # Versão nova recusa antes de processar: "ok":false.
 Check "webhook sem assinatura"          "$base/open-delivery-webhook?platform=keeta&storeId=$fakeStore" '{}'      "200" '"ok":false'
