@@ -1,8 +1,8 @@
 /**
  * AlertSystem — display layer only.
  *
- * Reads orders.alert_level from Supabase Realtime (set by compute-alert-state
- * edge function). Does NOT compute severity locally anymore.
+ * Reads orders.alert_level from Supabase Realtime (set every 30 s by the
+ * pg_cron job recompute-alert-levels). Does NOT compute severity locally.
  *
  * Responsibilities:
  *  - Subscribe to order changes for the current store

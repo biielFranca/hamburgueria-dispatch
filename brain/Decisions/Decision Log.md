@@ -232,7 +232,8 @@ Mover as funções internas para o schema `private` (não exposto por PostgREST/
 - ✅ Chamada pela API a função interna nem chega ao banco (404 do PostgREST)
 - ✅ Triggers continuam funcionando (apontam por OID)
 - ❌ Não revogar EXECUTE em funções de `public` enquanto a instância tiver o bug — usar sempre o schema `private` para funções internas novas
-- ❌ Advisor continua listando os 5 itens intencionais acima
+- ❌ Advisor continua listando os itens intencionais acima
+- **Atualização (26/set/2026):** `recompute_all_alert_levels` foi para `private` (sem `SECURITY DEFINER`) quando o cron `recompute-alert-levels` passou a chamá-la direto; a Edge Function `compute-alert-state` foi aposentada. Restam em `public` só os 4 helpers das policies.
 
 ### Fonte
 `supabase/migrations/20260926c_move_internal_functions_to_private.sql`, [[Roadmap de Estabilização]] item 0.5.4
