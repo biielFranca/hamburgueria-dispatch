@@ -145,7 +145,7 @@ describe('normalizeKeetaOrder', () => {
       latitude: -23.55, longitude: -46.65,
       total_amount: 59.9, payment_method: 'pix',
       delivery_type: 'delivery', logistics_type: 'own',
-      status: 'awaiting_route', route_eligibility: 'eligible',
+      status: 'received', route_eligibility: null,
       created_at: '2026-09-26T15:00:00Z',
     })
     expect(row.items).toEqual([{ name: 'X-Burger', quantity: 2, unit_price: 25.5, total_price: 51, notes: 'sem picles | 1x Bacon' }])
@@ -155,7 +155,7 @@ describe('normalizeKeetaOrder', () => {
     const row = normalizeKeetaOrder({ ...ORDER, delivery: { ...ORDER.delivery, deliveredBy: 'MARKETPLACE' } }, 's', {}, now)
     expect(row).toMatchObject({
       customer_phone: null, address_number: null, address_complement: null, address_neighborhood: null,
-      address_street: 'Rua Augusta', logistics_type: 'platform', status: 'normalized', route_eligibility: 'external_monitoring',
+      address_street: 'Rua Augusta', logistics_type: 'platform', status: 'received',
     })
     expect(JSON.stringify(row)).not.toContain('ENC_')
   })
@@ -163,6 +163,6 @@ describe('normalizeKeetaOrder', () => {
   it('treats takeout as pickup', () => {
     const { delivery: _drop, ...takeout } = ORDER
     const row = normalizeKeetaOrder({ ...takeout, type: 'TAKEOUT' }, 's', {}, now)
-    expect(row).toMatchObject({ delivery_type: 'pickup', logistics_type: 'platform', status: 'normalized', address_street: null })
+    expect(row).toMatchObject({ delivery_type: 'pickup', logistics_type: 'platform', status: 'received', address_street: null })
   })
 })

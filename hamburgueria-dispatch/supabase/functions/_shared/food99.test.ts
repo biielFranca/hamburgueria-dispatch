@@ -136,8 +136,9 @@ describe('normalizeFood99Order', () => {
       payment_method:      'credit_card',
       delivery_type:       'delivery',
       logistics_type:      'own',
-      status:              'awaiting_route',
-      route_eligibility:   'eligible',
+      // classification is dispatch-engine's job
+      status:              'received',
+      route_eligibility:   null,
       created_at:          '2020-10-16T07:14:34.000Z',
       updated_at:          now.toISOString(),
     })
@@ -149,13 +150,13 @@ describe('normalizeFood99Order', () => {
 
   it('treats 99Food courier delivery as platform logistics', () => {
     const row = normalizeFood99Order({ ...info(), delivery_type: 1 }, 's', now)
-    expect(row).toMatchObject({ logistics_type: 'platform', status: 'normalized', route_eligibility: 'external_monitoring' })
+    expect(row).toMatchObject({ logistics_type: 'platform', status: 'received' })
   })
 
   it('treats self pickup as pickup, whatever the delivery type', () => {
     for (const patch of [{ fulfillment_mode: 1 }, { delivery_type: 0 }]) {
       const row = normalizeFood99Order({ ...info(), ...patch }, 's', now)
-      expect(row).toMatchObject({ delivery_type: 'pickup', status: 'normalized', route_eligibility: 'external_monitoring' })
+      expect(row).toMatchObject({ delivery_type: 'pickup', status: 'received' })
     }
   })
 

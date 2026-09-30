@@ -380,6 +380,31 @@ Função dedicada `keeta-webhook`, no mesmo formato de `ifood-webhook` e `food99
 
 ---
 
+## Decisão 017
+### Título
+Classificação e rotas numa só implementação, no servidor (`dispatch-engine`)
+
+### Status
+Aceita (30/set/2026)
+
+### Contexto
+As regras de classificação e de agrupamento existiam duas vezes (front e Edge) e já divergiam; na prática só a do front rodava — uma vez por janela aberta, regravando pedidos a cada minuto. Os pontos de entrada gravavam o status final e pulavam geocodificação, endereço e agendamento.
+
+### Decisão
+Regras puras em `supabase/functions/_shared/domain/`. Todo pedido entra como `received`; a Edge Function `dispatch-engine` classifica e monta sugestões. É chamada por gatilho no banco (`pg_net`) quando um pedido chega ou é devolvido à fila pelo operador, e por `pg_cron` a cada minuto enquanto houver pedido esperando. Várias sugestões pendentes por loja (decisão do dono); pedidos reservados antes de gravar a sugestão em vez de trava.
+
+### Consequências
+- ✅ Uma implementação de cada regra, testada; nenhum processamento de negócio no app
+- ✅ Custo não depende do número de janelas abertas; loja parada = 0 chamadas
+- ✅ Todo pedido passa pelas mesmas regras, venha de onde vier
+- ❌ Depende da chave service role no Vault (`dispatch_engine_service_key`)
+- ❌ Geocodificação pelo Nominatim é bloqueada (403) a partir das Edge Functions — pendente escolher um geocodificador com chave
+
+### Fonte
+`supabase/functions/dispatch-engine/`, `supabase/functions/_shared/domain/`, `supabase/migrations/20260929_dispatch_engine.sql`
+
+---
+
 ## Notas Relacionadas
 - [[Visão Geral do Projeto]]
 - [[Sistema de Autenticação]]

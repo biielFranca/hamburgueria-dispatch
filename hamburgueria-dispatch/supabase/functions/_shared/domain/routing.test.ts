@@ -1,36 +1,23 @@
-import { describe, it, expect, vi } from 'vitest'
-
-vi.mock('./supabase', () => ({
-  supabase: { from: vi.fn(), channel: vi.fn(), removeChannel: vi.fn() },
-}))
-
+import { describe, it, expect } from 'vitest'
 import {
   haversineKm,
   permutations,
   combinations,
   nearestNeighborOrder,
   selectBestGroup,
-} from './routeEngine'
-import type { Order } from '../types'
+  planRoutes,
+  MAX_REJECTIONS,
+  type PlannableOrder,
+} from './routing'
 
-function makeOrder(id: string, lat: number, lng: number): Order {
+function makeOrder(id: string, lat: number | null, lng: number | null, extra: Partial<PlannableOrder> = {}): PlannableOrder {
   return {
     id,
-    store_id: 's1',
-    platform: 'ifood',
-    platform_order_id: id,
-    customer_name: 'X',
-    address_street: 'Rua',
-    items: [],
-    total_amount: 0,
-    delivery_type: 'delivery',
-    logistics_type: 'own',
-    status: 'awaiting_route',
-    rejection_count: 0,
     latitude: lat,
     longitude: lng,
+    rejection_count: 0,
     created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    ...extra,
   }
 }
 
@@ -176,5 +163,61 @@ describe('selectBestGroup', () => {
     ]
     const group = selectBestGroup(orders, store)
     expect(group.length).toBeLessThanOrEqual(3)
+  })
+})
+
+describe('planRoutes', () => {
+  const store: [number, number] = [0, 0]
+  const NOW = Date.parse('2026-09-29T20:00:00Z')
+  const WAIT = 10 * 60_000
+  const ago = (min: number) => new Date(NOW - min * 60_000).toISOString()
+
+  it('keeps grouping while 2+ orders remain (several pending suggestions)', () => {
+    const orders = [
+      makeOrder('a', 0.10, 0.10), makeOrder('b', 0.11, 0.10), makeOrder('c', 0.10, 0.11),
+      makeOrder('d', 3.00, 3.00), makeOrder('e', 3.01, 3.00),
+    ]
+    const plan = planRoutes(orders, store, NOW, WAIT)
+    expect(plan.groups.map(g => g.map(o => o.id).sort())).toEqual([['a', 'b', 'c'], ['d', 'e']])
+    expect(plan.waiting).toBeNull()
+  })
+
+  it('holds a lone order until the solo wait is over', () => {
+    const fresh = planRoutes([makeOrder('a', 1, 1, { created_at: ago(3) })], store, NOW, WAIT)
+    expect(fresh.groups).toEqual([])
+    expect(fresh.waiting?.id).toBe('a')
+
+    const old = planRoutes([makeOrder('a', 1, 1, { created_at: ago(11) })], store, NOW, WAIT)
+    expect(old.groups.map(g => g.map(o => o.id))).toEqual([['a']])
+    expect(old.waiting).toBeNull()
+  })
+
+  it('suggests the leftover of an odd batch alone only after its wait', () => {
+    const orders = [
+      makeOrder('a', 0.10, 0.10, { created_at: ago(1) }),
+      makeOrder('b', 0.11, 0.10, { created_at: ago(1) }),
+      makeOrder('c', 0.10, 0.11, { created_at: ago(1) }),
+      makeOrder('far', 5, 5, { created_at: ago(2) }),
+    ]
+    // 4 orders: the best 3-group goes first, the far one waits alone
+    const plan = planRoutes(orders, store, NOW, WAIT)
+    expect(plan.groups).toHaveLength(1)
+    expect(plan.waiting?.id).toBe('far')
+  })
+
+  it('times out orders at MAX_REJECTIONS and never groups them', () => {
+    const orders = [
+      makeOrder('tired', 0.10, 0.10, { rejection_count: MAX_REJECTIONS }),
+      makeOrder('b', 0.11, 0.10), makeOrder('c', 0.10, 0.11),
+    ]
+    const plan = planRoutes(orders, store, NOW, WAIT)
+    expect(plan.timedOut.map(o => o.id)).toEqual(['tired'])
+    expect(plan.groups.flat().map(o => o.id).sort()).toEqual(['b', 'c'])
+  })
+
+  it('ignores orders without coordinates', () => {
+    const plan = planRoutes([makeOrder('x', null, null), makeOrder('a', 1, 1, { created_at: ago(1) })], store, NOW, WAIT)
+    expect(plan.groups).toEqual([])
+    expect(plan.waiting?.id).toBe('a')
   })
 })

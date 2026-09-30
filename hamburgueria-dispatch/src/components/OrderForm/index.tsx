@@ -83,12 +83,6 @@ function normalizeOrder(form: FormState, storeId: string) {
     ? items.reduce((s, i) => s + i.total_price, 0)
     : 0
 
-  // Determine initial status after normalization
-  const hasDelivery  = form.delivery_type === 'delivery'
-  const isOwnLogist  = form.logistics_type === 'own'
-  const status       = (hasDelivery && isOwnLogist) ? 'awaiting_route' : 'normalized'
-  const eligibility  = (hasDelivery && isOwnLogist) ? 'eligible' : 'external_monitoring'
-
   return {
     store_id:              storeId,
     platform:              form.platform,
@@ -107,8 +101,10 @@ function normalizeOrder(form: FormState, storeId: string) {
     payment_method:        form.payment_method.trim() || null,
     delivery_type:         form.delivery_type,
     logistics_type:        form.logistics_type,
-    status,
-    route_eligibility:     eligibility,
+    // The dispatch-engine Edge Function classifies it (geocoding, address and
+    // schedule rules) — the same path as platform orders
+    status:                'received',
+    route_eligibility:     null,
     rejection_count:       0,
     created_at:            new Date().toISOString(),
     updated_at:            new Date().toISOString(),

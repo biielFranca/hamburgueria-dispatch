@@ -2,8 +2,6 @@ import { AuthBootstrap, useAuth } from './components/auth/AuthBootstrap'
 import { AccessControl } from './components/auth/AccessControl'
 import { AppNavigation } from './components/navigation/AppNavigation'
 import AlertSystem from './components/AlertSystem'
-import ClassifierService from './components/ClassifierService'
-import RouteEngineService from './components/RouteEngineService'
 import OfflineBanner from './components/OfflineBanner'
 import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
@@ -48,8 +46,6 @@ function AppShell() {
       <AppNavigation />
       <OfflineBanner />
       <ErrorBoundary label="AlertSystem" fallback={() => null}><AlertSystem /></ErrorBoundary>
-      <ErrorBoundary label="ClassifierService" fallback={() => null}><ClassifierService /></ErrorBoundary>
-      <ErrorBoundary label="RouteEngineService" fallback={() => null}><RouteEngineService /></ErrorBoundary>
     </AccessControl>
   )
 }
