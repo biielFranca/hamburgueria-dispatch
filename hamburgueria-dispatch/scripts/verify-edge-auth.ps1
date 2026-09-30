@@ -21,8 +21,7 @@ function Check($name, $url, $body, $expectCode, $expectText) {
 Check "ifood-sync sem token"            "$base/ifood-sync"                     '{}'                                           "401" $null
 Check "open-delivery-sync sem token"    "$base/open-delivery-sync"             '{"platform":"keeta"}'                         "401" $null
 Check "dispatch-confirm sem token"      "$base/open-delivery-dispatch-confirm" '{"platform":"keeta","platformOrderId":"x"}'   "401" $null
-Check "classify-orders sem token"       "$base/classify-orders"                '{}'                                           "401" $null
-Check "run-route-engine sem token"      "$base/run-route-engine"               '{}'                                           "401" $null
+Check "dispatch-engine sem token"       "$base/dispatch-engine"                '{}'                                           "401" $null
 Check "ifood-webhook sem assinatura"    "$base/ifood-webhook"                  '{"code":"KEEPALIVE"}'                         "401" $null
 Check "food99-webhook sem assinatura"   "$base/food99-webhook"                 '{"type":"orderNew"}'                          "401" $null
 Check "keeta-webhook sem assinatura"    "$base/keeta-webhook/v1/newEvent"      '{"eventType":"CREATED"}'                      "401" $null

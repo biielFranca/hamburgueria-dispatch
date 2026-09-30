@@ -31,6 +31,40 @@ function getBearer(req: Request): string | null {
   return match ? match[1].trim() : null
 }
 
+function jwtRole(token: string): string | null {
+  const part = token.split('.')[1]
+  if (!part) return null
+  try {
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=')
+    return JSON.parse(atob(b64))?.role ?? null
+  } catch {
+    return null
+  }
+}
+
+// Tokens already confirmed as service role by Auth (lives as long as the instance)
+const confirmedServiceTokens = new Set<string>()
+
+/**
+ * True for this project's service-role key. The runtime's
+ * SUPABASE_SERVICE_ROLE_KEY is not necessarily the legacy service_role JWT
+ * callers hold (projects on the new API keys get a different value), so a
+ * token that *claims* service role (JWT role or sb_secret_ key) is confirmed
+ * by an Auth admin call that only a real service-role key can make.
+ */
+async function isServiceRoleToken(token: string): Promise<boolean> {
+  if (token === SUPABASE_SERVICE_KEY || confirmedServiceTokens.has(token)) return true
+  if (!token.startsWith('sb_secret_') && jwtRole(token) !== 'service_role') return false
+
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=1`, {
+    headers: { apikey: token, Authorization: `Bearer ${token}` },
+  })
+  await res.body?.cancel()
+  if (!res.ok) return false
+  confirmedServiceTokens.add(token)
+  return true
+}
+
 /**
  * Resolves the store scope for a request.
  *
@@ -51,7 +85,7 @@ export async function resolveStoreScope(
   }
 
   // Service-role caller: trust the body.
-  if (token === SUPABASE_SERVICE_KEY) {
+  if (await isServiceRoleToken(token)) {
     if (!bodyStoreId) {
       return { ok: false, error: 'storeId is required for service-role calls', status: 400 }
     }

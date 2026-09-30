@@ -18,3 +18,5 @@ verify_jwt = false
 [functions.open-delivery-dispatch-confirm]
 verify_jwt = false
 
+[functions.dispatch-engine]
+verify_jwt = false

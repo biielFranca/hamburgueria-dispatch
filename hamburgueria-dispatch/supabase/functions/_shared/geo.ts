@@ -19,7 +19,12 @@ export interface AddressFields {
 
 async function nominatim(params: URLSearchParams, signal: AbortSignal): Promise<LatLng | null> {
   const res = await fetch(`${NOMINATIM}?${params}`, { headers: NOMINATIM_HEADERS, signal })
-  if (!res.ok) return null
+  if (!res.ok) {
+    // 403/429 = Nominatim throttling/blocking this runtime's IP
+    console.warn('[geo] nominatim HTTP %d', res.status)
+    await res.body?.cancel()
+    return null
+  }
   const data = await res.json()
   if (!Array.isArray(data) || !data.length) return null
   return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
