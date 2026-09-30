@@ -105,8 +105,9 @@ export function normalizeFood99Order(info: any, storeId: string, now = new Date(
     payment_method:       PAY_CHANNEL[String(info.pay_channel)] ?? (info.pay_method === 1 ? 'online' : null),
     delivery_type:        isPickup ? 'pickup' : 'delivery',
     logistics_type:       isOwn ? 'own' : 'platform',
-    status:               (!isPickup && isOwn) ? 'awaiting_route' : 'normalized',
-    route_eligibility:    (!isPickup && isOwn) ? 'eligible' : 'external_monitoring',
+    // dispatch-engine classifies it (geocoding, address and schedule rules)
+    status:               'received' as string,
+    route_eligibility:    null,
     rejection_count:      0,
     created_at:           createdAt.toISOString(),
     updated_at:           now.toISOString(),

@@ -136,8 +136,9 @@ function normalize(order: any, storeId: string) {
     payment_method:       PAY[rawPay] ?? rawPay.toLowerCase() ?? null,
     delivery_type:        isTakeout ? 'pickup' : 'delivery',
     logistics_type:       isOwn ? 'own' : 'platform',
-    status:               (!isTakeout && isOwn) ? 'awaiting_route' : 'normalized',
-    route_eligibility:    (!isTakeout && isOwn) ? 'eligible' : 'external_monitoring',
+    // dispatch-engine classifies it (geocoding, address and schedule rules)
+    status:               'received' as string,
+    route_eligibility:    null,
     rejection_count:      0,
     created_at:           order.createdAt ?? new Date().toISOString(),
     updated_at:           new Date().toISOString(),

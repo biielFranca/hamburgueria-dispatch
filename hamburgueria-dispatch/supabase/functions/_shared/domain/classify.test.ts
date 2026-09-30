@@ -1,33 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
+import { classifyOrder, needsGeocoding, type ClassifiableOrder } from './classify'
 
-vi.mock('./supabase', () => ({
-  supabase: { from: vi.fn(), channel: vi.fn(), removeChannel: vi.fn() },
-}))
-vi.mock('./geocoder', () => ({ geocodeOrderAddress: vi.fn() }))
-vi.mock('./routeEngine', () => ({ runRouteEngine: vi.fn() }))
-
-import { classifyOrder } from './classifier'
-import type { Order } from '../types'
-
-function makeOrder(overrides: Partial<Order> = {}): Order {
+function makeOrder(overrides: Partial<ClassifiableOrder> = {}): ClassifiableOrder {
   return {
-    id: 'o1',
-    store_id: 's1',
-    platform: 'ifood',
-    platform_order_id: 'p1',
-    customer_name: 'Test',
     address_street: 'Rua Teste',
-    address_number: '100',
-    items: [],
-    total_amount: 50,
     delivery_type: 'delivery',
     logistics_type: 'own',
-    status: 'normalized',
-    rejection_count: 0,
     latitude: -23.5,
     longitude: -46.6,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
     ...overrides,
   }
 }
@@ -44,6 +24,8 @@ describe('classifyOrder', () => {
     const result = classifyOrder(makeOrder({ logistics_type: 'platform' }))
     expect(result.route_eligibility).toBe('external_monitoring')
     expect(result.route_block_reason).toBeNull()
+    // 'external_monitoring' is not a valid orders.status (the old Edge copy used it)
+    expect(result.status).toBe('normalized')
   })
 
   it('sets awaiting when latitude is missing', () => {
@@ -101,5 +83,15 @@ describe('classifyOrder', () => {
       latitude: undefined,
     }))
     expect(result.route_eligibility).toBe('external_monitoring')
+  })
+})
+
+describe('needsGeocoding', () => {
+  it('is true only for own-delivery orders with a street but no coordinates', () => {
+    expect(needsGeocoding(makeOrder({ latitude: null }))).toBe(true)
+    expect(needsGeocoding(makeOrder())).toBe(false)
+    expect(needsGeocoding(makeOrder({ latitude: null, logistics_type: 'platform' }))).toBe(false)
+    expect(needsGeocoding(makeOrder({ latitude: null, delivery_type: 'pickup' }))).toBe(false)
+    expect(needsGeocoding(makeOrder({ latitude: null, address_street: ' ' }))).toBe(false)
   })
 })

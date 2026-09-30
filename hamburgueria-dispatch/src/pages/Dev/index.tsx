@@ -3,10 +3,17 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/auth/AuthBootstrap'
 import { syncIfood } from '../../lib/ifood'
 import { playAlert } from '../../lib/alertSound'
-import { runRouteEngine } from '../../lib/routeEngine'
-import type { RouteEngineResult } from '../../lib/routeEngine'
 import type { Order } from '../../types'
 import './Dev.css'
+
+/** Response of the dispatch-engine Edge Function. */
+interface DispatchEngineResult {
+  classified: number
+  outcome:
+    | 'suggestion_created' | 'no_store_coords' | 'no_eligible_orders'
+    | 'all_timed_out' | 'no_coords_on_orders' | 'solo_waiting'
+  detail?: string
+}
 
 const NAMES = ['João Silva', 'Maria Souza', 'Carlos Oliveira', 'Ana Costa', 'Pedro Santos', 'Lucia Ferreira', 'Fernanda Lima', 'Rafael Mendes']
 const PAYMENTS = ['pix', 'credit_card', 'debit_card', 'cash']
@@ -100,10 +107,10 @@ function mockOrder(storeId: string, type: 'own' | 'platform' | 'pickup', prepMin
     estimated_delivery_at: isTakeout
       ? null
       : new Date(Date.now() + prepMinutes * 60_000).toISOString(),
-    // All orders start as 'normalized' so the classifier does a meaningful UPDATE
-    // to 'awaiting_route', which triggers the route engine via Realtime.
-    status: 'normalized',
-    route_eligibility: isTakeout ? 'blocked' : isOwn ? 'awaiting' : 'external_monitoring',
+    // Same path as real orders: inserted as 'received', the DB trigger calls
+    // the dispatch-engine Edge Function, which classifies and routes it.
+    status: 'received',
+    route_eligibility: null,
     rejection_count: 0,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -165,7 +172,8 @@ export default function Dev() {
   const [eligible, setEligible] = useState<number | null>(null)
   const [pendingSugg, setPendingSugg] = useState<number | null>(null)
   const [engineRunning, setEngineRunning] = useState(false)
-  const SOLO_WAIT = Number(import.meta.env.VITE_SOLO_WAIT_MIN ?? 10)
+  // Display only — the real wait is the dispatch-engine's SOLO_WAIT_MIN (default 10)
+  const SOLO_WAIT = 10
 
   function addLog(level: LogLevel, msg: string) {
     setLog(prev => [{ id: newId(), ts: new Date(), level, msg }, ...prev].slice(0, MAX_LOG))
@@ -328,15 +336,15 @@ export default function Dev() {
     setTimeout(() => set(IDLE), 4000)
   }
 
-  function logEngineResult(result: RouteEngineResult) {
+  function logEngineResult(result: DispatchEngineResult) {
     const d = result.detail ? ` — ${result.detail}` : ''
-    const outcomes: Record<RouteEngineResult['outcome'], [LogLevel, string]> = {
+    if (result.classified) addLog('info', `[route-engine] ${result.classified} pedido(s) classificado(s)`)
+    const outcomes: Record<DispatchEngineResult['outcome'], [LogLevel, string]> = {
       suggestion_created:  ['ok',   `[route-engine] Sugestão criada${d}`],
-      concurrent_skip:     ['warn', '[route-engine] Engine já em execução — chamada ignorada'],
       no_store_coords:     ['warn', '[route-engine] Loja sem coordenadas — configure lat/lng em Configurações'],
       no_eligible_orders:  ['info', '[route-engine] Nenhum pedido elegível no momento'],
       all_timed_out:       ['warn', '[route-engine] Todos os pedidos atingiram o limite de recusas'],
-      no_coords_on_orders: ['warn', `[route-engine] Pedidos sem coordenadas (geocodificação pendente)${d}`],
+      no_coords_on_orders: ['warn', `[route-engine] Pedidos sem coordenadas (geocodificação falhou)${d}`],
       solo_waiting:        ['info', `[route-engine] 1 pedido solo aguardando${d}`],
     }
     const [level, msg] = outcomes[result.outcome] ?? ['info', `[route-engine] ${result.outcome}${d}`]
@@ -348,8 +356,11 @@ export default function Dev() {
     setEngineRunning(true)
     addLog('info', '[route-engine] Execução manual iniciada...')
     try {
-      const result = await runRouteEngine(storeId)
-      logEngineResult(result)
+      // Runs on the server; the store comes from the user's JWT
+      const { data, error } = await supabase.functions.invoke('dispatch-engine', { body: {} })
+      if (error) throw error
+      if (!data?.ok) throw new Error(data?.error ?? 'dispatch-engine falhou')
+      logEngineResult(data as DispatchEngineResult)
     } catch (e) {
       addLog('error', `[route-engine] Erro: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
