@@ -172,3 +172,13 @@ describe('normalizeFood99Order', () => {
     expect(normalizeFood99Order(i, 's', now).customer_name).toBe('Cliente 99Food')
   })
 })
+
+describe('normalizeFood99Order — sandbox payloads', () => {
+  it('treats poi_lat/poi_lng = 0 as missing (the 99Food sandbox sends 0)', () => {
+    const i = parseFood99Json(ORDER_NEW).data.order_info
+    i.receive_address = { ...i.receive_address, poi_lat: 0, poi_lng: 0 }
+    const row = normalizeFood99Order(i, 's', new Date('2026-10-05T12:00:00Z'))
+    expect(row.latitude).toBeNull()
+    expect(row.longitude).toBeNull()
+  })
+})
