@@ -1,54 +1,43 @@
 /**
- * iFood integration must run in trusted backend.
- * This client module only calls backend functions and never handles secrets.
+ * The app's only iFood module (roadmap 1.4). Everything that talks to iFood
+ * runs in Edge Functions; this module only calls them with the user's JWT
+ * (supabase.functions.invoke) and never handles secrets. The server derives
+ * the store from the JWT — the app never names it.
+ *
+ * Orders arrive by webhook (ifood-webhook); syncIfood is the manual
+ * reconciliation behind the "sincronizar agora" button in Settings.
  */
 
-import { syncIfood } from '../ifood'
 import { supabase } from '../supabase'
 
-const POLL_MS = 30_000
-let pollInterval: ReturnType<typeof setInterval> | null = null
-
-function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+export interface IfoodSyncResult {
+  inserted: number
+  closed?:  number
+  events:   number
+  errors:   string[]
 }
 
+/** Pulls and applies pending iFood events for the logged-in user's store. */
+export async function syncIfood(): Promise<IfoodSyncResult> {
+  const { data, error } = await supabase.functions.invoke('ifood-sync', { body: {} })
+  if (error) throw new Error(`Falha ao sincronizar com o iFood: ${error.message}`)
+  if (data?.ok === false) throw new Error(String(data.error ?? 'Falha ao sincronizar com o iFood'))
+  return data as IfoodSyncResult
+}
+
+/**
+ * Tells iFood an own-delivery order left the store. NOTE: the Edge Function
+ * ifood-dispatch-confirm does not exist yet (pending in the roadmap, with the
+ * 99Food/Keeta equivalents), so this currently fails and callers treat it as
+ * best-effort.
+ */
 export async function confirmIfoodDispatch(platformOrderId: string): Promise<void> {
   const orderId = platformOrderId.trim()
-  if (!orderId) {
-    throw new Error('platformOrderId invalido')
-  }
+  if (!orderId) throw new Error('platformOrderId inválido')
 
   const { data, error } = await supabase.functions.invoke('ifood-dispatch-confirm', {
     body: { platformOrderId: orderId },
   })
-
-  if (error) {
-    throw new Error(`Falha ao confirmar despacho no backend: ${error.message}`)
-  }
-
-  if (data && typeof data === 'object' && 'ok' in data && (data as any).ok === false) {
-    throw new Error(String((data as any).error ?? 'Falha ao confirmar despacho no iFood'))
-  }
-}
-
-export function startIfoodPolling(storeId: string, _merchantId?: string): () => void {
-  if (pollInterval || !storeId) return () => {}
-
-  const run = () => {
-    syncIfood(storeId).catch(err => {
-      console.error('[iFood] polling error:', describeError(err))
-    })
-  }
-
-  const timeout = setTimeout(run, 3_000)
-  pollInterval = setInterval(run, POLL_MS)
-
-  return () => {
-    clearTimeout(timeout)
-    if (pollInterval) {
-      clearInterval(pollInterval)
-      pollInterval = null
-    }
-  }
+  if (error) throw new Error(`Falha ao confirmar despacho no backend: ${error.message}`)
+  if (data?.ok === false) throw new Error(String(data.error ?? 'Falha ao confirmar despacho no iFood'))
 }

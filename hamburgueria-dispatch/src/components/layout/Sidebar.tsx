@@ -111,7 +111,8 @@ export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, use
       </nav>
 
       <div className="sidebar-bottom">
-        <button
+        {/* Dev page only exists in development builds (roadmap 1.5) */}
+        {import.meta.env.DEV && <button
           className={`sidebar-btn ${activePage === 'dev' ? 'active' : ''}`}
           onClick={() => onNavigate('dev')}
           title="Dev / Testes"
@@ -120,7 +121,7 @@ export default function Sidebar({ activePage, onNavigate, onLogout, isOwner, use
             <polyline points="16 18 22 12 16 6"/>
             <polyline points="8 6 2 12 8 18"/>
           </svg>
-        </button>
+        </button>}
 
         {isOwner && <button
           className={`sidebar-btn ${activePage === 'settings' ? 'active' : ''}`}

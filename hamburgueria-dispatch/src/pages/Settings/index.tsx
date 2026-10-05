@@ -4,7 +4,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/auth/AuthBootstrap'
-import { syncIfood } from '../../lib/ifood'
+import { syncIfood } from '../../lib/integrations/ifood'
 import { fetchAddressByCep } from '../../lib/cep'
 import type { Store } from '../../types'
 import './Settings.css'
@@ -137,7 +137,7 @@ function IntegrationCard({
 
     try {
       if (def.key === 'ifood') {
-        const result = await syncIfood(storeId)
+        const result = await syncIfood()
         setTestResult(`✓ Sync ok — ${result.events} evento(s), ${result.inserted} inserido(s)`)
       } else {
         // 99Food and Keeta push orders to food99-webhook / keeta-webhook

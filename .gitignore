@@ -5,3 +5,6 @@ target
 __pycache__/
 *.pyc
 *.pyo
+
+# Local agent skills (installed per machine, not part of the project)
+.agents/
