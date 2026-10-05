@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { createHash } from 'node:crypto'
 import {
   parseFood99Json, verifyFood99Signature, food99Action, food99OrderId, normalizeFood99Order,
+  food99Body, splitCourierName, food99Phone, food99DispatchBody,
 } from './food99'
 
 // Trimmed from the orderNew example in the 99Food docs (Order Webhooks)
@@ -180,5 +181,42 @@ describe('normalizeFood99Order — sandbox payloads', () => {
     const row = normalizeFood99Order(i, 's', new Date('2026-10-05T12:00:00Z'))
     expect(row.latitude).toBeNull()
     expect(row.longitude).toBeNull()
+  })
+})
+
+describe('store-delivery request bodies', () => {
+  it('writes the 64-bit order_id as an exact bare number', () => {
+    const body = food99Body({ auth_token: 't' }, '5764607667678086822')
+    expect(body).toBe('{"auth_token":"t","order_id":5764607667678086822}')
+    expect(parseFood99Json(body).order_id).toBe('5764607667678086822')
+    expect(() => food99Body({}, '12a')).toThrow()
+  })
+
+  it('splits the courier name into first/last (both required)', () => {
+    expect(splitCourierName('Maria da Silva')).toEqual({ name: 'Maria da Silva', first: 'Maria', last: 'da Silva' })
+    expect(splitCourierName('João')).toEqual({ name: 'João', first: 'João', last: 'João' })
+    expect(splitCourierName('  ')).toEqual({ name: 'Entregador', first: 'Entregador', last: 'Entregador' })
+  })
+
+  it('normalizes Brazilian phones and rejects unusable ones', () => {
+    expect(food99Phone('(11) 94660-5740')).toEqual({ code: '+55', number: '11946605740' })
+    expect(food99Phone('+55 11 94660-5740')).toEqual({ code: '+55', number: '11946605740' })
+    expect(food99Phone('1234')).toBeNull()
+    expect(food99Phone(null)).toBeNull()
+  })
+
+  it('builds the dispatch body with courier and times', () => {
+    const now = new Date('2026-10-05T12:00:00Z')
+    const body = food99DispatchBody({
+      authToken: 't', orderId: '5764607667678086822', courierName: 'Carlos Lima',
+      phone: { code: '+55', number: '11946605740' }, now, etaMinutes: 12,
+    })
+    const parsed = parseFood99Json(body)
+    expect(parsed.order_id).toBe('5764607667678086822')
+    expect(parsed.courier_info).toEqual({
+      courier_name: 'Carlos Lima', courier_first_name: 'Carlos', courier_last_name: 'Lima',
+      courier_phone_code: '+55', courier_phone: '11946605740',
+    })
+    expect(parsed.limit_time).toEqual({ pickup_time: 1791201600, delivery_time: 1791201600 + 12 * 60 })
   })
 })

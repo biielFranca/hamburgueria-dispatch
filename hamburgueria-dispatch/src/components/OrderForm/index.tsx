@@ -87,6 +87,8 @@ function normalizeOrder(form: FormState, storeId: string) {
     store_id:              storeId,
     platform:              form.platform,
     platform_order_id:     crypto.randomUUID(),
+    // Not a platform order: platform-dispatch must not confirm it anywhere
+    source_channel:        'MANUAL',
     platform_order_code:   form.platform_order_code.trim() || null,
     customer_name:         form.customer_name.trim(),
     customer_phone:        form.customer_phone.trim() || null,

@@ -25,19 +25,3 @@ export async function syncIfood(): Promise<IfoodSyncResult> {
   return data as IfoodSyncResult
 }
 
-/**
- * Tells iFood an own-delivery order left the store. NOTE: the Edge Function
- * ifood-dispatch-confirm does not exist yet (pending in the roadmap, with the
- * 99Food/Keeta equivalents), so this currently fails and callers treat it as
- * best-effort.
- */
-export async function confirmIfoodDispatch(platformOrderId: string): Promise<void> {
-  const orderId = platformOrderId.trim()
-  if (!orderId) throw new Error('platformOrderId inválido')
-
-  const { data, error } = await supabase.functions.invoke('ifood-dispatch-confirm', {
-    body: { platformOrderId: orderId },
-  })
-  if (error) throw new Error(`Falha ao confirmar despacho no backend: ${error.message}`)
-  if (data?.ok === false) throw new Error(String(data.error ?? 'Falha ao confirmar despacho no iFood'))
-}

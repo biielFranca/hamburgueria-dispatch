@@ -115,3 +115,60 @@ export function normalizeFood99Order(info: any, storeId: string, now = new Date(
     updated_at:           now.toISOString(),
   }
 }
+
+// ── Outbound requests (store-delivery actions) ──────────────────────────────
+
+/**
+ * JSON body with a 64-bit order_id written as a bare number, exactly as
+ * 99Food sent it — JSON.stringify would need a JS number and lose precision.
+ */
+export function food99Body(fields: Record<string, unknown>, orderId: string): string {
+  if (!/^\d+$/.test(orderId)) throw new Error(`invalid 99Food order_id: ${orderId}`)
+  const json = JSON.stringify({ ...fields, order_id: '__ORDER_ID__' })
+  return json.replace('"__ORDER_ID__"', orderId)
+}
+
+/** "Maria da Silva" → first "Maria", last "da Silva" (99Food requires both). */
+export function splitCourierName(full: string | null | undefined): { name: string; first: string; last: string } {
+  const name = (full ?? '').trim().replace(/\s+/g, ' ') || 'Entregador'
+  const [first, ...rest] = name.split(' ')
+  return { name, first, last: rest.join(' ') || first }
+}
+
+/** Brazilian phone → { code: '+55', number: digits without country code }. */
+export function food99Phone(raw: string | null | undefined): { code: string; number: string } | null {
+  let digits = (raw ?? '').replace(/\D/g, '')
+  if (digits.length > 11 && digits.startsWith('55')) digits = digits.slice(2)
+  return digits.length >= 10 ? { code: '+55', number: digits } : null
+}
+
+/**
+ * /order/selfdelivery/dispatch body: courier, and the pickup/delivery times
+ * (unix seconds) the customer will see.
+ */
+export function food99DispatchBody(args: {
+  authToken:   string
+  orderId:     string
+  courierName: string | null
+  phone:       { code: string; number: string }
+  now:         Date
+  etaMinutes:  number | null
+}): string {
+  const { name, first, last } = splitCourierName(args.courierName)
+  const pickup = Math.floor(args.now.getTime() / 1000)
+  return food99Body({
+    auth_token:   args.authToken,
+    courier_info: {
+      courier_name:       name,
+      courier_first_name: first,
+      courier_last_name:  last,
+      courier_phone_code: args.phone.code,
+      courier_phone:      args.phone.number,
+    },
+    limit_time: {
+      pickup_time:   pickup,
+      // no route ETA → 30 min, a typical own-delivery promise
+      delivery_time: pickup + Math.max(5, args.etaMinutes ?? 30) * 60,
+    },
+  }, args.orderId)
+}
