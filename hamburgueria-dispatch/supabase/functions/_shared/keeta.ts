@@ -181,8 +181,9 @@ export function normalizeKeetaOrder(order: any, storeId: string, plain: Record<s
     payment_method:       method ? (PAYMENT[method] ?? method.toLowerCase()) : null,
     delivery_type:        isPickup ? 'pickup' : 'delivery',
     logistics_type:       isOwn ? 'own' : 'platform',
-    status:               isOwn ? 'awaiting_route' : 'normalized',
-    route_eligibility:    isOwn ? 'eligible' : 'external_monitoring',
+    // dispatch-engine classifies it (geocoding, address and schedule rules)
+    status:               'received' as string,
+    route_eligibility:    null,
     rejection_count:      0,
     created_at:           text(order.createdAt) ?? now.toISOString(),
     updated_at:           now.toISOString(),
