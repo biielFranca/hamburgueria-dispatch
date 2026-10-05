@@ -222,7 +222,8 @@ Advisors de segurança sem nenhum item ERROR/WARN, exceto os justificados por es
 
 Maior impacto no custo e na correção. Os itens se sobrepõem no mesmo código, por isso vêm juntos.
 
-### 1.1 Filtrar Realtime da tela Operacional por loja
+### 1.1 Filtrar Realtime da tela Operacional por loja — ✅ Concluído (04/out/2026)
+> As três assinaturas (`orders`, `dispatch_suggestions`, `drivers`) ganharam `filter: store_id=eq.<loja>` e o canal virou `op-main-<loja>`. **Achado:** só `orders` está na publicação do Realtime (migration `20260926e`); `dispatch_suggestions` e `drivers` nunca emitiram evento. Sugestões novas aparecem mesmo assim porque o servidor muda os pedidos para `in_suggestion` ao criá-las (evento de `orders`); motoristas dependem do polling de 60 s. Publicar as outras tabelas fica para o 2.2, junto com os updates incrementais.
 - **Por quê:** `src/pages/Operational/index.tsx:563-565` assina `orders`, `dispatch_suggestions` e `drivers` **sem** `filter`. Com RLS ativa o Realtime não entrega linhas de outra loja ao cliente (não é vazamento), mas o servidor avalia RLS para cada mudança de cada loja, e o padrão fica inconsistente com `Orders`, `AlertSystem` e `RouteEngine`, que já filtram.
 - **Como:** adicionar `filter: \`store_id=eq.${storeId}\`` nas três assinaturas e incluir `storeId` no nome do canal (`op-main-${storeId}`).
 - **Risco:** baixo.

@@ -558,11 +558,14 @@ export default function Operational() {
       }, 300)
     }
 
+    // Only this store's rows: RLS would hide other stores' rows anyway, but
+    // without the filter Realtime still evaluates every change of every store.
+    const filter = `store_id=eq.${storeId}`
     const channel = supabase
-      .channel('op-main')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, scheduleFetch)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatch_suggestions' }, scheduleFetch)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, scheduleFetch)
+      .channel(`op-main-${storeId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter }, scheduleFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatch_suggestions', filter }, scheduleFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers', filter }, scheduleFetch)
       .subscribe(status => {
         // Header dot turns red when Realtime drops so the operator notices
         // staleness instead of trusting a frozen panel.
