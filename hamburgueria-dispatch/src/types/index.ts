@@ -94,7 +94,7 @@ export interface Order {
   platform_order_code?: string
   customer_name: string
   customer_phone?: string
-  address_street: string
+  address_street: string | null
   address_number?: string
   address_complement?: string
   address_neighborhood?: string

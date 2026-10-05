@@ -61,6 +61,8 @@ const PAY_CHANNEL: Record<string, string> = {
 
 const cents = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0)) / 100
 const blank = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+// 99Food sends 0 (not null) when it has no coordinate — that is not a place
+const coord = (v: unknown) => (typeof v === 'number' && v !== 0 ? v : null)
 
 /** orderNew `data.order_info` (same schema as /order/order/detail) → orders row. */
 export function normalizeFood99Order(info: any, storeId: string, now = new Date()) {
@@ -98,8 +100,8 @@ export function normalizeFood99Order(info: any, storeId: string, now = new Date(
     address_neighborhood: blank(addr.district),
     address_city:         blank(addr.city),
     address_zip:          blank(addr.postalCode),
-    latitude:             typeof addr.poi_lat === 'number' ? addr.poi_lat : null,
-    longitude:            typeof addr.poi_lng === 'number' ? addr.poi_lng : null,
+    latitude:             coord(addr.poi_lat),
+    longitude:            coord(addr.poi_lng),
     items,
     total_amount:         cents(price.real_pay_price ?? price.customer_need_paying_money ?? price.order_price),
     payment_method:       PAY_CHANNEL[String(info.pay_channel)] ?? (info.pay_method === 1 ? 'online' : null),
