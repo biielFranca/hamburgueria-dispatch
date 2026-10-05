@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/auth/AuthBootstrap'
-import { syncIfood } from '../../lib/ifood'
+import { syncIfood } from '../../lib/integrations/ifood'
 import { playAlert } from '../../lib/alertSound'
 import type { Order } from '../../types'
 import './Dev.css'
@@ -377,7 +377,7 @@ export default function Dev() {
     }
     setIfoodBtn({ state: 'loading', msg: '' })
     try {
-      const result = await syncIfood(storeId)
+      const result = await syncIfood()
       setIfoodBtn({
         state: 'ok',
         msg: `Sync executada - ${result.events} evento(s), ${result.inserted} inserido(s)`,

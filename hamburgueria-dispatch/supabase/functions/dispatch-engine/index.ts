@@ -50,7 +50,7 @@ async function logEvent(
 
 // ── Step 1: classify ──────────────────────────────────────────────────────────
 
-async function classifyStep(db: SupabaseClient, storeId: string): Promise<number> {
+async function classifyStep(db: SupabaseClient, storeId: string, storeCoord: LatLng | null): Promise<number> {
   // New orders, plus scheduled ones that may have come due
   const { data: orders, error } = await db.from('orders')
     .select('id, status, delivery_type, logistics_type, latitude, longitude, address_street, address_number, address_neighborhood, address_city, address_zip, estimated_delivery_at, route_eligibility')
@@ -67,7 +67,7 @@ async function classifyStep(db: SupabaseClient, storeId: string): Promise<number
     if (needsGeocoding(order) && geocodes < MAX_GEOCODES_PER_RUN) {
       if (geocodes > 0) await sleep(NOMINATIM_SPACING_MS)
       geocodes++
-      const hit = await geocodeAddress(order)
+      const hit = await geocodeAddress(order, storeCoord ?? undefined)
       if (hit) coords = { latitude: hit[0], longitude: hit[1] }
     }
 
@@ -138,10 +138,8 @@ async function createSuggestion(db: SupabaseClient, storeId: string, storeCoord:
   return suggestion.id
 }
 
-async function routeStep(db: SupabaseClient, storeId: string): Promise<{ outcome: Outcome; detail?: string; suggestions: number; timedOut: number }> {
-  const { data: store } = await db.from('stores').select('latitude, longitude').eq('id', storeId).single()
-  if (store?.latitude == null || store?.longitude == null) return { outcome: 'no_store_coords', suggestions: 0, timedOut: 0 }
-  const storeCoord: LatLng = [store.latitude, store.longitude]
+async function routeStep(db: SupabaseClient, storeId: string, storeCoord: LatLng | null): Promise<{ outcome: Outcome; detail?: string; suggestions: number; timedOut: number }> {
+  if (!storeCoord) return { outcome: 'no_store_coords', suggestions: 0, timedOut: 0 }
 
   const { data, error } = await db.from('orders')
     .select('id, status, platform_order_code, latitude, longitude, rejection_count, created_at')
@@ -212,8 +210,11 @@ Deno.serve(async (req: Request) => {
   })
 
   try {
-    const classified = await classifyStep(db, auth.storeId)
-    const route = await routeStep(db, auth.storeId)
+    const { data: store } = await db.from('stores').select('latitude, longitude').eq('id', auth.storeId).single()
+    const storeCoord: LatLng | null = store?.latitude != null && store?.longitude != null ? [store.latitude, store.longitude] : null
+
+    const classified = await classifyStep(db, auth.storeId, storeCoord)
+    const route = await routeStep(db, auth.storeId, storeCoord)
     console.log('[dispatch-engine] store=%s classified=%d outcome=%s suggestions=%d', auth.storeId, classified, route.outcome, route.suggestions)
     return json({ ok: true, classified, ...route })
   } catch (e) {

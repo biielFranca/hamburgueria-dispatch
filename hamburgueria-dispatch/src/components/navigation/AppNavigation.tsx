@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useAccess } from '../auth/AccessControl'
 import { useAuth } from '../auth/AuthBootstrap'
 import Sidebar from '../layout/Sidebar'
@@ -6,13 +6,17 @@ import Orders from '../../pages/Orders'
 import Operational from '../../pages/Operational'
 import Drivers from '../../pages/Drivers'
 import UsersPage from '../../pages/Users'
-import Dev from '../../pages/Dev'
 import Settings from '../../pages/Settings'
 import Cardapio from '../../pages/Cardapio'
 import Estoque from '../../pages/Estoque'
 import SocialMedia from '../../pages/SocialMedia'
 import ErrorBoundary from '../ErrorBoundary'
 import type { Page } from '../../App'
+
+// Dev page (fake orders, manual engine runs) exists only in `npm run tauri dev`:
+// import.meta.env.DEV is false in production builds, so Vite drops this
+// branch and the page never ships inside the executable (roadmap 1.5).
+const Dev = import.meta.env.DEV ? lazy(() => import('../../pages/Dev')) : null
 
 export function AppNavigation() {
   const [activePage, setActivePage] = useState<Page>('operational')
@@ -39,7 +43,7 @@ export function AppNavigation() {
           {activePage === 'orders'      && hasAccess('orders')      && <Orders />}
           {activePage === 'drivers'     && hasAccess('drivers')     && <Drivers />}
           {activePage === 'users'       && hasAccess('users')       && <UsersPage />}
-          {activePage === 'dev'         && hasAccess('dev')         && <Dev />}
+          {Dev && activePage === 'dev' && hasAccess('dev') && <Suspense fallback={null}><Dev /></Suspense>}
           {activePage === 'settings'    && hasAccess('settings')    && <Settings />}
           {activePage === 'cardapio'    && hasAccess('cardapio')    && <Cardapio />}
           {activePage === 'estoque'     && hasAccess('estoque')     && <Estoque />}
