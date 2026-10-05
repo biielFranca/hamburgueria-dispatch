@@ -19,19 +19,12 @@
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  type KeetaEvent, canonicalJson, encryptedFields, isKeetaOwnDelivery, keetaAction, keetaConfirmBody, keetaSign,
-  keetaSignatureString, normalizeKeetaOrder, verifyKeetaSignature,
+  type KeetaEvent, encryptedFields, isKeetaOwnDelivery, keetaAction, keetaConfirmBody,
+  normalizeKeetaOrder, verifyKeetaSignature,
 } from '../_shared/keeta.ts'
-
-interface KeetaIntegration {
-  id:               string
-  store_id:         string
-  client_id:        string | null
-  client_secret:    string | null
-  access_token:     string | null
-  token_expires_at: string | null
-  merchant_id:      string | null
-}
+import {
+  type KeetaIntegration, KEETA_INTEGRATION_COLUMNS, apiRootFromOrderUrl, getKeetaToken, keetaFetch,
+} from '../_shared/keetaApi.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const FN_NAME      = 'keeta-webhook'
@@ -40,60 +33,6 @@ const problem = (status: number, title: string) =>
   new Response(JSON.stringify({ title, status }), { status, headers: { 'Content-Type': 'application/problem+json' } })
 
 const parkedKey = (orderId: string) => `keeta-terminal:${orderId}`
-
-// orderURL looks like https://<keeta host>/<prefix>/v1/orders/<id>; the API
-// root (token, batchDecrypt) is everything before /v1/orders.
-function apiRoot(orderUrl: string): string {
-  const u = new URL(orderUrl)
-  if (u.protocol !== 'https:') throw new Error('orderURL must be https')
-  const i = u.pathname.indexOf('/v1/orders')
-  return `${u.origin}${i >= 0 ? u.pathname.slice(0, i) : ''}`
-}
-
-async function getToken(sb: SupabaseClient, integration: KeetaIntegration, root: string): Promise<string> {
-  if (integration.access_token && integration.token_expires_at && new Date(integration.token_expires_at) > new Date()) {
-    return integration.access_token
-  }
-  const res = await fetch(`${root}/oauth/token`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({
-      client_id:     integration.client_id,
-      client_secret: integration.client_secret,
-      grant_type:    'app_level_token',
-    }),
-  })
-  const text = await res.text()
-  if (!res.ok) throw new Error(`Keeta auth failed (${res.status}): ${text.slice(0, 200) || '(empty)'}`)
-  const data = JSON.parse(text)
-  if (!data.access_token) throw new Error('Keeta auth returned no access_token')
-  const expiresAt = new Date(Date.now() + Math.max(60, (data.expires_in ?? 3600) - 300) * 1000).toISOString()
-  await sb.from('store_integrations')
-    .update({ access_token: data.access_token, token_expires_at: expiresAt })
-    .eq('id', integration.id)
-  integration.access_token     = data.access_token
-  integration.token_expires_at = expiresAt
-  return data.access_token
-}
-
-/** Signed request to Keeta (same signature scheme it uses on webhooks). */
-async function keetaFetch(integration: KeetaIntegration, token: string, url: string, body?: unknown) {
-  const u = new URL(url)
-  const params = Object.fromEntries(u.searchParams)
-  const payload = body === undefined ? '' : canonicalJson(body)
-  const signature = await keetaSign(integration.client_secret!, keetaSignatureString(`${u.origin}${u.pathname}`, params, payload))
-  const headers: Record<string, string> = {
-    Authorization:     `Bearer ${token}`,
-    'X-App-Signature': signature,
-  }
-  if (integration.merchant_id) headers['X-App-MerchantId'] = integration.merchant_id
-  if (payload) headers['Content-Type'] = 'application/json'
-  const res = await fetch(url, { method: payload ? 'POST' : 'GET', headers, body: payload || undefined })
-  const text = await res.text()
-  if (!res.ok) throw new Error(`${u.pathname} failed (${res.status}): ${text.slice(0, 200) || '(empty)'}`)
-  // confirm answers 202 with no body
-  return text.trim() ? JSON.parse(text) : null
-}
 
 async function decryptAll(integration: KeetaIntegration, token: string, root: string, ciphers: string[]) {
   const plain: Record<string, string> = {}
@@ -114,7 +53,7 @@ async function applyEvent(sb: SupabaseClient, integration: KeetaIntegration, ev:
 
   if (action === 'new') {
     if (!ev.orderURL) throw new Error(`CREATED ${ev.orderId} without orderURL`)
-    const root = apiRoot(ev.orderURL)
+    const root = apiRootFromOrderUrl(ev.orderURL)
 
     let { data: existing } = await sb.from('orders')
       .select('id, status')
@@ -123,7 +62,7 @@ async function applyEvent(sb: SupabaseClient, integration: KeetaIntegration, ev:
     let result = 'duplicate'
 
     if (!existing) {
-      const token = await getToken(sb, integration, root)
+      const token = await getKeetaToken(sb, integration, root)
       const order = await keetaFetch(integration, token, ev.orderURL)
       // Only own-delivery orders can be decrypted; platform ones keep those fields empty
       const plain = isKeetaOwnDelivery(order) ? await decryptAll(integration, token, root, encryptedFields(order)) : {}
@@ -149,7 +88,7 @@ async function applyEvent(sb: SupabaseClient, integration: KeetaIntegration, ev:
       const confirmedKey = `keeta-confirmed:${ev.orderId}`
       const { data: done } = await sb.from('idempotency_keys').select('key').eq('key', confirmedKey).maybeSingle()
       if (!done) {
-        const token = await getToken(sb, integration, root)
+        const token = await getKeetaToken(sb, integration, root)
         await keetaFetch(integration, token, `${root}/v1/orders/${encodeURIComponent(ev.orderId)}/confirm`, keetaConfirmBody(existing.id))
         await sb.from('idempotency_keys').upsert({
           key: confirmedKey, store_id: storeId, fn_name: 'keeta-events', result: { confirmed: true },
@@ -198,7 +137,7 @@ Deno.serve(async (req: Request) => {
   const sb = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const { data: rows, error: le } = await sb
     .from('store_integrations')
-    .select('id, store_id, client_id, client_secret, access_token, token_expires_at, merchant_id')
+    .select(KEETA_INTEGRATION_COLUMNS)
     .eq('platform', 'keeta').eq('active', true)
   if (le) return problem(500, 'integrations lookup failed')
   const integrations = (rows ?? []) as KeetaIntegration[]

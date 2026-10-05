@@ -12,10 +12,7 @@ verify_jwt = false
 [functions.keeta-webhook]
 verify_jwt = false
 
-[functions.open-delivery-sync]
-verify_jwt = false
-
-[functions.open-delivery-dispatch-confirm]
+[functions.platform-dispatch]
 verify_jwt = false
 
 [functions.dispatch-engine]

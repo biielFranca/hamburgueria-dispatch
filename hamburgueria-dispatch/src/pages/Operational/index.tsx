@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/auth/AuthBootstrap'
-import { confirmIfoodDispatch } from '../../lib/integrations/ifood'
-import { confirmOpenDeliveryDispatch } from '../../lib/integrations/openDelivery'
 import { fetchRouteGeometry, findOptimalSequence } from '../../lib/routes'
 import { logOrderEvent } from '../../lib/orderEvents'
 import type { Driver, Order, Platform, Store } from '../../types'
@@ -602,17 +600,17 @@ export default function Operational() {
 
     setLoadingAction(suggestion.id)
 
-    await Promise.all([
-      supabase.from('dispatch_suggestions').update({
-        status: 'dispatched',
-        assigned_driver_id: driverId,
-        reviewed_at: now,
-      }).eq('id', suggestion.id),
-      supabase.from('orders').update({
-        status: 'dispatched',
-        dispatched_at: now,
-      }).in('id', orderIds),
-    ])
+    // Suggestion first: the orders update fires platform-dispatch (DB
+    // trigger), which reads the driver and ETA from this suggestion.
+    await supabase.from('dispatch_suggestions').update({
+      status: 'dispatched',
+      assigned_driver_id: driverId,
+      reviewed_at: now,
+    }).eq('id', suggestion.id)
+    await supabase.from('orders').update({
+      status: 'dispatched',
+      dispatched_at: now,
+    }).in('id', orderIds)
 
     // Audit: one 'dispatched' event per order
     for (const order of suggestion.orders) {
@@ -632,19 +630,8 @@ export default function Operational() {
       })
     }
 
-    // Notify platforms — best-effort, never block the UI on failure
-    for (const order of suggestion.orders) {
-      if (order.platform === 'ifood') {
-        confirmIfoodDispatch(order.platform_order_id).catch(e =>
-          console.warn('[Dispatch] iFood confirm failed:', e),
-        )
-      } else if (order.platform === '99food') {
-        confirmOpenDeliveryDispatch(order.platform, order.platform_order_id).catch(e =>
-          console.warn(`[Dispatch] ${order.platform} confirm failed:`, e),
-        )
-        // keeta: always platform-managed logistics, never reaches dispatch queue
-      }
-    }
+    // Platforms (iFood/99Food/Keeta) are told by platform-dispatch, fired by a
+    // DB trigger on the status change — nothing to do here.
 
     // Add to in-progress tab
     setInProgress(prev => [...prev, {
